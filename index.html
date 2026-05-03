@@ -3,186 +3,216 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft 網頁版 - 登陸頁面</title>
+    <title>Minecraft Web - Three.js 版</title>
+    <!-- 引入 Three.js -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
     <style>
-        /* 1. 基礎設定與背景漸層 */
-        body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            font-family: "Microsoft JhengHei", sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            /* 由天藍色到草地綠的線性漸層 */
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: "Microsoft JhengHei", sans-serif; }
+        
+        /* 遊戲畫面容器 */
+        #game-container { width: 100%; height: 100%; }
+
+        /* 登陸介面 Overlay (參考 螢幕擷取畫面 2026-04-20 162839.png) */
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
             background: linear-gradient(to bottom, #00b4ff 0%, #0072ff 30%, #00a859 100%);
-            color: white;
-            overflow: hidden;
+            z-index: 10; text-align: center; color: white;
         }
 
-        .container {
-            text-align: center;
-            max-width: 600px;
-            width: 90%;
-        }
-
-        /* 2. 標題設計：文字陰影營造 3D 感 */
-        .title-area h1 {
-            font-size: 80px;
-            margin: 0;
-            letter-spacing: 5px;
-            font-weight: 900;
-            text-transform: uppercase;
-            color: #fff;
-            /* 模擬圖片中的藍色立體陰影 */
-            text-shadow: 4px 4px 0px #006699;
-        }
-
-        .subtitle {
-            font-size: 24px;
-            margin-top: 10px;
-            letter-spacing: 2px;
-            opacity: 0.9;
-        }
-
-        /* 3. 開始遊戲按鈕 */
+        .title-area h1 { font-size: 80px; margin: 0; text-shadow: 4px 4px 0px #006699; }
         .play-button {
-            margin: 40px 0;
-            background: linear-gradient(to bottom, #00cc44, #008822);
-            border: none;
-            padding: 15px 40px;
-            font-size: 28px;
-            color: white;
-            border-radius: 10px;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            box-shadow: 0px 6px 0px #005511, 0px 10px 20px rgba(0,0,0,0.3);
-            transition: transform 0.1s, box-shadow 0.1s;
+            margin: 40px 0; background: linear-gradient(to bottom, #00cc44, #008822);
+            border: none; padding: 15px 40px; font-size: 28px; color: white;
+            border-radius: 10px; cursor: pointer; box-shadow: 0px 6px 0px #005511;
         }
+        .play-button:active { transform: translateY(4px); box-shadow: 0px 2px 0px #005511; }
 
-        .play-button:active {
-            transform: translateY(4px);
-            box-shadow: 0px 2px 0px #005511;
-        }
-
-        .play-icon {
-            width: 0;
-            height: 0;
-            border-top: 12px solid transparent;
-            border-bottom: 12px solid transparent;
-            border-left: 20px solid white;
-            margin-right: 15px;
-        }
-
-        /* 4. 遊戲操作說明卡片 */
         .controls-card {
-            background-color: rgba(0, 80, 120, 0.6); /* 半透明深藍綠色 */
-            border-radius: 15px;
-            padding: 25px;
-            text-align: left;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            background-color: rgba(0, 80, 120, 0.6); border-radius: 15px; padding: 25px;
+            text-align: left; border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
-        .card-title {
-            font-size: 20px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-        }
-
-        .info-icon {
-            width: 20px;
-            height: 20px;
-            border: 2px solid white;
-            border-radius: 50%;
-            display: inline-flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 14px;
-            margin-right: 10px;
-            font-style: italic;
-        }
-
-        .control-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 12px;
-            font-size: 18px;
-        }
-
-        .icon {
-            width: 24px;
-            margin-right: 15px;
-            text-align: center;
-            font-size: 20px;
-            opacity: 0.8;
-        }
-
-        .key-text {
-            font-weight: bold;
-            margin-right: 5px;
-        }
-
-        /* 5. 底部提示文字 */
-        .footer-text {
-            margin-top: 30px;
-            font-size: 14px;
-            opacity: 0.8;
-            letter-spacing: 1px;
+        /* 十字準心 */
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
+            border: 2px solid white; transform: translate(-50%, -50%);
+            z-index: 5; pointer-events: none; display: none;
         }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <!-- 標題區 -->
-        <div class="title-area">
-            <h1>Minecraft</h1>
-            <div class="subtitle">網頁版</div>
-        </div>
+    <div id="crosshair"></div>
 
-        <!-- 按鈕區 -->
-        <button class="play-button">
-            <div class="play-icon"></div>
-            開始遊戲
-        </button>
-
-        <!-- 操作說明區 -->
-        <div class="controls-card">
-            <div class="card-title">
-                <span class="info-icon">i</span> 遊戲操作
+    <!-- 登陸介面 -->
+    <div id="overlay">
+        <div class="container">
+            <div class="title-area">
+                <h1>MINECRAFT</h1>
+                <div style="font-size: 24px;">網頁版 (Three.js)</div>
             </div>
-            
-            <div class="control-item">
-                <span class="icon">🖱️</span> <span class="key-text">滑鼠移動</span> - 轉動視角
+            <button class="play-button" id="btn-play">開始遊戲</button>
+            <div class="controls-card">
+                <div>🖱️ 點擊左鍵 - 破壞方塊</div>
+                <div>🖱️ 點擊右鍵 - 放置方塊</div>
+                <div>⌨️ W/A/S/D - 移動方向</div>
+                <div>⌨️ ESC - 退出控制</div>
             </div>
-            <div class="control-item">
-                <span class="icon">⌨️</span> <span class="key-text">W/A/S/D</span> - 移動
-            </div>
-            <div class="control-item">
-                <span class="icon">⌨️</span> <span class="key-text">空格</span> - 跳躍
-            </div>
-            <div class="control-item">
-                <span class="icon">🖱️</span> <span class="key-text">左鍵</span> - 破壞方塊
-            </div>
-            <div class="control-item">
-                <span class="icon">🖱️</span> <span class="key-text">右鍵</span> - 放置方塊
-            </div>
-            <div class="control-item">
-                <span class="icon">⌨️</span> <span class="key-text">1-7</span> - 選擇方塊類型
-            </div>
-            <div class="control-item">
-                <span class="icon">⌨️</span> <span class="key-text">ESC</span> - 顯示/隱藏選單
-            </div>
-        </div>
-
-        <!-- 頁尾提示 -->
-        <div class="footer-text">
-            點擊畫面後開始遊戲，盡情建造你的世界！
         </div>
     </div>
 
+    <!-- 遊戲渲染容器 -->
+    <div id="game-container"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // --- 1. 基本場景設定 ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); // 天藍色背景
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('game-container').appendChild(renderer.domElement);
+
+        // --- 2. 燈光 ---
+        const light = new THREE.HemisphereLight(0xeeeeee, 0x888888, 1.5);
+        scene.add(light);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
+
+        // --- 3. 玩家控制 ---
+        const controls = new PointerLockControls(camera, document.body);
+        const btnPlay = document.getElementById('btn-play');
+        const overlay = document.getElementById('overlay');
+        const crosshair = document.getElementById('crosshair');
+
+        btnPlay.addEventListener('click', () => {
+            controls.lock();
+        });
+
+        controls.addEventListener('lock', () => {
+            overlay.style.display = 'none';
+            crosshair.style.display = 'block';
+        });
+
+        controls.addEventListener('unlock', () => {
+            overlay.style.display = 'flex';
+            crosshair.style.display = 'none';
+        });
+
+        // --- 4. 生成世界 (草地) ---
+        const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+        const grassMaterial = new THREE.MeshLambertMaterial({ color: 0x4CAF50 });
+        const blocks = [];
+
+        for (let x = -10; x < 10; x++) {
+            for (let z = -10; z < 10; z++) {
+                const mesh = new THREE.Mesh(boxGeo, grassMaterial);
+                mesh.position.set(x, 0, z);
+                scene.add(mesh);
+                blocks.push(mesh);
+            }
+        }
+        camera.position.set(0, 2, 5);
+
+        // --- 5. 互動功能 (破壞與放置) ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2(0, 0); // 準心在正中央
+
+        window.addEventListener('mousedown', (event) => {
+            if (!controls.isLocked) return;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(blocks);
+
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+
+                if (event.button === 0) { // 左鍵：刪除
+                    scene.remove(intersect.object);
+                    blocks.splice(blocks.indexOf(intersect.object), 1);
+                } else if (event.button === 2) { // 右鍵：放置
+                    const newBlock = new THREE.Mesh(boxGeo, new THREE.MeshLambertMaterial({ color: 0x8B4513 })); // 泥土色
+                    const normal = intersect.face.normal.clone();
+                    newBlock.position.copy(intersect.object.position).add(normal);
+                    scene.add(newBlock);
+                    blocks.push(newBlock);
+                }
+            }
+        });
+
+        // --- 6. 移動邏輯 ---
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+
+        const onKeyDown = (event) => {
+            switch (event.code) {
+                case 'KeyW': moveForward = true; break;
+                case 'KeyS': moveBackward = true; break;
+                case 'KeyA': moveLeft = true; break;
+                case 'KeyD': moveRight = true; break;
+            }
+        };
+
+        const onKeyUp = (event) => {
+            switch (event.code) {
+                case 'KeyW': moveForward = false; break;
+                case 'KeyS': moveBackward = false; break;
+                case 'KeyA': moveLeft = false; break;
+                case 'KeyD': moveRight = false; break;
+            }
+        };
+
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp);
+
+        // --- 7. 動畫迴圈 (Game Loop) ---
+        let prevTime = performance.now();
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (controls.isLocked) {
+                const time = performance.now();
+                const delta = (time - prevTime) / 1000;
+
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+
+                direction.z = Number(moveForward) - Number(moveBackward);
+                direction.x = Number(moveRight) - Number(moveLeft);
+                direction.normalize();
+
+                if (moveForward || moveBackward) velocity.z -= direction.z * 100.0 * delta;
+                if (moveLeft || moveRight) velocity.x -= direction.x * 100.0 * delta;
+
+                controls.moveRight(-velocity.x * delta);
+                controls.moveForward(-velocity.z * delta);
+
+                prevTime = time;
+            }
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // 處理視窗大小改變
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
 </body>
 </html>
