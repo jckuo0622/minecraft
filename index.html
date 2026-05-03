@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft 網頁版 - 登陸頁面</title>
+    <style>
+        /* 1. 基礎設定與背景漸層 */
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: "Microsoft JhengHei", sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            /* 由天藍色到草地綠的線性漸層 */
+            background: linear-gradient(to bottom, #00b4ff 0%, #0072ff 30%, #00a859 100%);
+            color: white;
+            overflow: hidden;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 600px;
+            width: 90%;
+        }
+
+        /* 2. 標題設計：文字陰影營造 3D 感 */
+        .title-area h1 {
+            font-size: 80px;
+            margin: 0;
+            letter-spacing: 5px;
+            font-weight: 900;
+            text-transform: uppercase;
+            color: #fff;
+            /* 模擬圖片中的藍色立體陰影 */
+            text-shadow: 4px 4px 0px #006699;
+        }
+
+        .subtitle {
+            font-size: 24px;
+            margin-top: 10px;
+            letter-spacing: 2px;
+            opacity: 0.9;
+        }
+
+        /* 3. 開始遊戲按鈕 */
+        .play-button {
+            margin: 40px 0;
+            background: linear-gradient(to bottom, #00cc44, #008822);
+            border: none;
+            padding: 15px 40px;
+            font-size: 28px;
+            color: white;
+            border-radius: 10px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            box-shadow: 0px 6px 0px #005511, 0px 10px 20px rgba(0,0,0,0.3);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+
+        .play-button:active {
+            transform: translateY(4px);
+            box-shadow: 0px 2px 0px #005511;
+        }
+
+        .play-icon {
+            width: 0;
+            height: 0;
+            border-top: 12px solid transparent;
+            border-bottom: 12px solid transparent;
+            border-left: 20px solid white;
+            margin-right: 15px;
+        }
+
+        /* 4. 遊戲操作說明卡片 */
+        .controls-card {
+            background-color: rgba(0, 80, 120, 0.6); /* 半透明深藍綠色 */
+            border-radius: 15px;
+            padding: 25px;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        .card-title {
+            font-size: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+
+        .info-icon {
+            width: 20px;
+            height: 20px;
+            border: 2px solid white;
+            border-radius: 50%;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+            margin-right: 10px;
+            font-style: italic;
+        }
+
+        .control-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 18px;
+        }
+
+        .icon {
+            width: 24px;
+            margin-right: 15px;
+            text-align: center;
+            font-size: 20px;
+            opacity: 0.8;
+        }
+
+        .key-text {
+            font-weight: bold;
+            margin-right: 5px;
+        }
+
+        /* 5. 底部提示文字 */
+        .footer-text {
+            margin-top: 30px;
+            font-size: 14px;
+            opacity: 0.8;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- 標題區 -->
+        <div class="title-area">
+            <h1>Minecraft</h1>
+            <div class="subtitle">網頁版</div>
+        </div>
+
+        <!-- 按鈕區 -->
+        <button class="play-button">
+            <div class="play-icon"></div>
+            開始遊戲
+        </button>
+
+        <!-- 操作說明區 -->
+        <div class="controls-card">
+            <div class="card-title">
+                <span class="info-icon">i</span> 遊戲操作
+            </div>
+            
+            <div class="control-item">
+                <span class="icon">🖱️</span> <span class="key-text">滑鼠移動</span> - 轉動視角
+            </div>
+            <div class="control-item">
+                <span class="icon">⌨️</span> <span class="key-text">W/A/S/D</span> - 移動
+            </div>
+            <div class="control-item">
+                <span class="icon">⌨️</span> <span class="key-text">空格</span> - 跳躍
+            </div>
+            <div class="control-item">
+                <span class="icon">🖱️</span> <span class="key-text">左鍵</span> - 破壞方塊
+            </div>
+            <div class="control-item">
+                <span class="icon">🖱️</span> <span class="key-text">右鍵</span> - 放置方塊
+            </div>
+            <div class="control-item">
+                <span class="icon">⌨️</span> <span class="key-text">1-7</span> - 選擇方塊類型
+            </div>
+            <div class="control-item">
+                <span class="icon">⌨️</span> <span class="key-text">ESC</span> - 顯示/隱藏選單
+            </div>
+        </div>
+
+        <!-- 頁尾提示 -->
+        <div class="footer-text">
+            點擊畫面後開始遊戲，盡情建造你的世界！
+        </div>
+    </div>
+
+</body>
+</html>
