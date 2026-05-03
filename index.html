@@ -3,193 +3,179 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Web - Three.js 版</title>
-    <!-- 引入 Three.js -->
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
-        }
-    </script>
+    <title>Minecraft Web - 視覺與物理升級版</title>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: "Microsoft JhengHei", sans-serif; }
-        
-        /* 遊戲畫面容器 */
-        #game-container { width: 100%; height: 100%; }
-
-        /* 登陸介面 Overlay (參考 螢幕擷取畫面 2026-04-20 162839.png) */
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; }
         #overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; justify-content: center; align-items: center;
-            background: linear-gradient(to bottom, #00b4ff 0%, #0072ff 30%, #00a859 100%);
-            z-index: 10; text-align: center; color: white;
+            background: linear-gradient(to bottom, #00b4ff, #00a859);
+            z-index: 100; text-align: center; color: white;
         }
-
-        .title-area h1 { font-size: 80px; margin: 0; text-shadow: 4px 4px 0px #006699; }
         .play-button {
-            margin: 40px 0; background: linear-gradient(to bottom, #00cc44, #008822);
-            border: none; padding: 15px 40px; font-size: 28px; color: white;
-            border-radius: 10px; cursor: pointer; box-shadow: 0px 6px 0px #005511;
+            margin: 20px 0; background: #00aa44; border: none; padding: 15px 40px; 
+            font-size: 28px; color: white; border-radius: 10px; cursor: pointer;
+            box-shadow: 0px 6px 0px #005511; transition: 0.1s;
         }
         .play-button:active { transform: translateY(4px); box-shadow: 0px 2px 0px #005511; }
-
-        .controls-card {
-            background-color: rgba(0, 80, 120, 0.6); border-radius: 15px; padding: 25px;
-            text-align: left; border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        /* 十字準心 */
         #crosshair {
-            position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
+            position: absolute; top: 50%; left: 50%; width: 16px; height: 16px;
             border: 2px solid white; transform: translate(-50%, -50%);
-            z-index: 5; pointer-events: none; display: none;
+            z-index: 5; display: none; pointer-events: none;
         }
     </style>
 </head>
 <body>
 
     <div id="crosshair"></div>
-
-    <!-- 登陸介面 -->
     <div id="overlay">
-        <div class="container">
-            <div class="title-area">
-                <h1>MINECRAFT</h1>
-                <div style="font-size: 24px;">網頁版 (Three.js)</div>
-            </div>
+        <div>
+            <h1 style="font-size: 60px; text-shadow: 4px 4px #006699;">MINECRAFT</h1>
+            <p>已加入：像素貼圖、重力模擬、跳躍功能</p>
             <button class="play-button" id="btn-play">開始遊戲</button>
-            <div class="controls-card">
-                <div>🖱️ 點擊左鍵 - 破壞方塊</div>
-                <div>🖱️ 點擊右鍵 - 放置方塊</div>
-                <div>⌨️ W/A/S/D - 移動方向</div>
-                <div>⌨️ ESC - 退出控制</div>
+            <div style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 10px; text-align: left;">
+                <li><b>W/A/S/D</b>：移動</li>
+                <li><b>空白鍵 (Space)</b>：跳躍</li>
+                <li><b>滑鼠左鍵</b>：破壞方塊</li>
+                <li><b>滑鼠右鍵</b>：放置方塊</li>
             </div>
         </div>
     </div>
 
-    <!-- 遊戲渲染容器 -->
-    <div id="game-container"></div>
-
     <script type="module">
-        import * as THREE from 'three';
-        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+        import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
+        import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/PointerLockControls.js';
 
-        // --- 1. 基本場景設定 ---
+        // --- 1. 視覺升級：動態生成像素貼圖 ---
+        function createPixelTexture(color1, color2) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 16;
+            canvas.height = 16;
+            const context = canvas.getContext('2d');
+            for (let x = 0; x < 16; x++) {
+                for (let y = 0; y < 16; y++) {
+                    context.fillStyle = Math.random() > 0.5 ? color1 : color2;
+                    context.fillRect(x, y, 1, 1);
+                }
+            }
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.NearestFilter; // 關鍵：保持像素感，不模糊
+            return texture;
+        }
+
+        const grassTopTex = createPixelTexture('#5dad44', '#77bc43');
+        const dirtTex = createPixelTexture('#8b5a2b', '#7a4e25');
+
+        // 定義草地材料（上方綠色，側面與下方泥土色）
+        const grassMaterials = [
+            new THREE.MeshLambertMaterial({ map: dirtTex }), // 右
+            new THREE.MeshLambertMaterial({ map: dirtTex }), // 左
+            new THREE.MeshLambertMaterial({ map: grassTopTex }), // 上
+            new THREE.MeshLambertMaterial({ map: dirtTex }), // 下
+            new THREE.MeshLambertMaterial({ map: dirtTex }), // 前
+            new THREE.MeshLambertMaterial({ map: dirtTex }), // 後
+        ];
+
+        // --- 2. 初始化場景 ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87CEEB); // 天藍色背景
-        
+        scene.background = new THREE.Color(0x87CEEB);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const renderer = new THREE.WebGLRenderer({ antialias: false }); // 關閉反鋸齒增加像素感
         renderer.setSize(window.innerWidth, window.innerHeight);
-        document.getElementById('game-container').appendChild(renderer.domElement);
+        document.body.appendChild(renderer.domElement);
 
-        // --- 2. 燈光 ---
-        const light = new THREE.HemisphereLight(0xeeeeee, 0x888888, 1.5);
-        scene.add(light);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
-        dirLight.position.set(10, 20, 10);
-        scene.add(dirLight);
-
-        // --- 3. 玩家控制 ---
         const controls = new PointerLockControls(camera, document.body);
         const btnPlay = document.getElementById('btn-play');
         const overlay = document.getElementById('overlay');
-        const crosshair = document.getElementById('crosshair');
-
-        btnPlay.addEventListener('click', () => {
-            controls.lock();
-        });
+        btnPlay.addEventListener('click', () => controls.lock());
 
         controls.addEventListener('lock', () => {
             overlay.style.display = 'none';
-            crosshair.style.display = 'block';
+            document.getElementById('crosshair').style.display = 'block';
         });
 
         controls.addEventListener('unlock', () => {
             overlay.style.display = 'flex';
-            crosshair.style.display = 'none';
+            document.getElementById('crosshair').style.display = 'none';
         });
 
-        // --- 4. 生成世界 (草地) ---
-        const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-        const grassMaterial = new THREE.MeshLambertMaterial({ color: 0x4CAF50 });
-        const blocks = [];
+        // --- 3. 物理與移動變數 ---
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let canJump = false;
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
 
-        for (let x = -10; x < 10; x++) {
-            for (let z = -10; z < 10; z++) {
-                const mesh = new THREE.Mesh(boxGeo, grassMaterial);
+        // --- 4. 生成世界 ---
+        const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+        const blocks = [];
+        for(let x = -10; x < 10; x++) {
+            for(let z = -10; z < 10; z++) {
+                const mesh = new THREE.Mesh(boxGeo, grassMaterials);
                 mesh.position.set(x, 0, z);
                 scene.add(mesh);
                 blocks.push(mesh);
             }
         }
+
+        const light = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(light);
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        sunLight.position.set(5, 10, 2);
+        scene.add(sunLight);
+
         camera.position.set(0, 2, 5);
 
-        // --- 5. 互動功能 (破壞與放置) ---
+        // --- 5. 監聽鍵盤 ---
+        document.addEventListener('keydown', (e) => {
+            switch (e.code) {
+                case 'KeyW': moveForward = true; break;
+                case 'KeyS': moveBackward = true; break;
+                case 'KeyA': moveLeft = true; break;
+                case 'KeyD': moveRight = true; break;
+                case 'Space': if (canJump) velocity.y += 12; canJump = false; break;
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            switch (e.code) {
+                case 'KeyW': moveForward = false; break;
+                case 'KeyS': moveBackward = false; break;
+                case 'KeyA': moveLeft = false; break;
+                case 'KeyD': moveRight = false; break;
+            }
+        });
+
+        // --- 6. 互動功能 (破壞與放置) ---
         const raycaster = new THREE.Raycaster();
-        const mouse = new THREE.Vector2(0, 0); // 準心在正中央
-
-        window.addEventListener('mousedown', (event) => {
+        window.addEventListener('mousedown', (e) => {
             if (!controls.isLocked) return;
-
-            raycaster.setFromCamera(mouse, camera);
+            raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
             const intersects = raycaster.intersectObjects(blocks);
-
             if (intersects.length > 0) {
                 const intersect = intersects[0];
-
-                if (event.button === 0) { // 左鍵：刪除
+                if (e.button === 0) { // 左鍵：破壞
                     scene.remove(intersect.object);
                     blocks.splice(blocks.indexOf(intersect.object), 1);
-                } else if (event.button === 2) { // 右鍵：放置
-                    const newBlock = new THREE.Mesh(boxGeo, new THREE.MeshLambertMaterial({ color: 0x8B4513 })); // 泥土色
-                    const normal = intersect.face.normal.clone();
-                    newBlock.position.copy(intersect.object.position).add(normal);
+                } else if (e.button === 2) { // 右鍵：放置
+                    const newBlock = new THREE.Mesh(boxGeo, grassMaterials);
+                    newBlock.position.copy(intersect.object.position).add(intersect.face.normal);
                     scene.add(newBlock);
                     blocks.push(newBlock);
                 }
             }
         });
 
-        // --- 6. 移動邏輯 ---
-        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-        const velocity = new THREE.Vector3();
-        const direction = new THREE.Vector3();
-
-        const onKeyDown = (event) => {
-            switch (event.code) {
-                case 'KeyW': moveForward = true; break;
-                case 'KeyS': moveBackward = true; break;
-                case 'KeyA': moveLeft = true; break;
-                case 'KeyD': moveRight = true; break;
-            }
-        };
-
-        const onKeyUp = (event) => {
-            switch (event.code) {
-                case 'KeyW': moveForward = false; break;
-                case 'KeyS': moveBackward = false; break;
-                case 'KeyA': moveLeft = false; break;
-                case 'KeyD': moveRight = false; break;
-            }
-        };
-
-        document.addEventListener('keydown', onKeyDown);
-        document.addEventListener('keyup', onKeyUp);
-
-        // --- 7. 動畫迴圈 (Game Loop) ---
+        // --- 7. 遊戲迴圈：處理物理模擬 ---
         let prevTime = performance.now();
         function animate() {
             requestAnimationFrame(animate);
-
             if (controls.isLocked) {
                 const time = performance.now();
                 const delta = (time - prevTime) / 1000;
 
+                // 阻力與重力更新
                 velocity.x -= velocity.x * 10.0 * delta;
                 velocity.z -= velocity.z * 10.0 * delta;
+                velocity.y -= 9.8 * 3.5 * delta; // 模擬重力 $g = 9.8$
 
                 direction.z = Number(moveForward) - Number(moveBackward);
                 direction.x = Number(moveRight) - Number(moveLeft);
@@ -201,13 +187,20 @@
                 controls.moveRight(-velocity.x * delta);
                 controls.moveForward(-velocity.z * delta);
 
+                // 垂直位移與地面檢測
+                camera.position.y += (velocity.y * delta);
+                if (camera.position.y < 1.8) { // 假設玩家身高為 1.8 單位
+                    velocity.y = 0;
+                    camera.position.y = 1.8;
+                    canJump = true;
+                }
+
                 prevTime = time;
             }
             renderer.render(scene, camera);
         }
         animate();
 
-        // 處理視窗大小改變
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
