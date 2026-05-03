@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Web - 完整碰撞修正版</title>
+    <title>Minecraft Web - 物理優化最終版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: "Microsoft JhengHei", sans-serif; }
         #overlay {
@@ -30,12 +30,12 @@
     <div id="overlay">
         <div>
             <h1 style="font-size: 60px; text-shadow: 4px 4px #006699;">MINECRAFT</h1>
-            <p>已修正：方塊側面穿透、掉落判定</p>
+            <p>物理升級：滑行系統、分軸碰撞檢測</p>
             <button class="play-button" id="btn-play">開始遊戲</button>
             <div style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 10px; text-align: left;">
-                <li><b>W/A/S/D</b>：移動 (現在會被牆擋住)</li>
+                <li><b>流暢移動</b>：現在可以貼著牆壁滑行</li>
+                <li><b>精準碰撞</b>：修正了一頓一頓的抖動問題</li>
                 <li><b>空白鍵</b>：跳躍</li>
-                <li><b>左鍵/右鍵</b>：破壞與建造</li>
             </div>
         </div>
     </div>
@@ -46,7 +46,7 @@
         import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
         import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/PointerLockControls.js';
 
-        // --- 1. 視覺貼圖生成 ---
+        // --- 1. 貼圖生成 ---
         function createPixelTexture(c1, c2) {
             const canvas = document.createElement('canvas');
             canvas.width = 16; canvas.height = 16;
@@ -59,7 +59,6 @@
             tex.magFilter = THREE.NearestFilter;
             return tex;
         }
-
         const grassTop = createPixelTexture('#5dad44', '#77bc43');
         const dirtSide = createPixelTexture('#8b5a2b', '#7a4e25');
         const grassMaterials = [
@@ -68,7 +67,7 @@
             new THREE.MeshLambertMaterial({map: dirtSide}), new THREE.MeshLambertMaterial({map: dirtSide})
         ];
 
-        // --- 2. 場景初始化 ---
+        // --- 2. 初始化 ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
@@ -92,19 +91,17 @@
             blocks.push(m);
         }
         scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-        camera.position.set(0, 2, 5);
+        camera.position.set(0, 1.8, 5);
 
-        // --- 4. 物理移動與碰撞偵測變數 ---
+        // --- 4. 物理控制變數 ---
         let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false;
-        const vel = new THREE.Vector3();
-        const dir = new THREE.Vector3();
-        const ray = new THREE.Raycaster(); // 用於水平碰撞與互動
-        const groundRay = new THREE.Raycaster(); // 專門偵測腳底
+        const velocity = new THREE.Vector3();
+        const playerRadius = 0.35; // 玩家的碰撞半徑 (Hitbox)
 
         document.addEventListener('keydown', (e) => {
             if(e.code==='KeyW') moveF=true; if(e.code==='KeyS') moveB=true;
             if(e.code==='KeyA') moveL=true; if(e.code==='KeyD') moveR=true;
-            if(e.code==='Space' && canJump) { vel.y += 12; canJump = false; }
+            if(e.code==='Space' && canJump) { velocity.y += 10; canJump = false; }
         });
         document.addEventListener('keyup', (e) => {
             if(e.code==='KeyW') moveF=false; if(e.code==='KeyS') moveB=false;
@@ -112,10 +109,11 @@
         });
 
         // 破壞與建造
+        const raycaster = new THREE.Raycaster();
         window.addEventListener('mousedown', (e) => {
             if (!controls.isLocked) return;
-            ray.setFromCamera(new THREE.Vector2(0,0), camera);
-            const inter = ray.intersectObjects(blocks);
+            raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+            const inter = raycaster.intersectObjects(blocks);
             if (inter.length > 0) {
                 if (e.button === 0) {
                     scene.remove(inter[0].object);
@@ -129,15 +127,21 @@
             }
         });
 
-        // --- 5. 核心邏輯：碰撞檢測函式 ---
-        function checkCollision(directionVector) {
-            // 從相機位置（稍微降低一點，到胸口位置）發射射線
-            const rayPos = camera.position.clone();
-            rayPos.y -= 0.5; 
-            ray.set(rayPos, directionVector);
-            const hits = ray.intersectObjects(blocks);
-            // 如果前方 0.5 單位內有東西，就回傳「碰撞」
-            return hits.length > 0 && hits[0].distance < 0.5;
+        // --- 5. 核心：碰撞偵測函式 ---
+        // 檢查給定座標是否有方塊
+        function isColliding(x, y, z) {
+            // 簡化判定：檢查玩家圓柱體與方塊的交集
+            for (let block of blocks) {
+                const b = block.position;
+                if (
+                    x + playerRadius > b.x - 0.5 && x - playerRadius < b.x + 0.5 &&
+                    z + playerRadius > b.z - 0.5 && z - playerRadius < b.z + 0.5 &&
+                    y - 1.6 < b.y + 0.5 && y > b.y - 0.5 // 1.6 是身高偏移
+                ) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         // --- 6. 遊戲迴圈 ---
@@ -146,49 +150,74 @@
             requestAnimationFrame(animate);
             if (controls.isLocked) {
                 const t = performance.now();
-                const dt = (t - prevT) / 1000;
+                const dt = Math.min((t - prevT) / 1000, 0.1); // 防止切換分頁導致 dt 過大
 
-                // 物理阻力與重力
-                vel.x -= vel.x * 10 * dt;
-                vel.z -= vel.z * 10 * dt;
-                vel.y -= 9.8 * 4.0 * dt; 
+                // 阻力
+                velocity.x -= velocity.x * 10 * dt;
+                velocity.z -= velocity.z * 10 * dt;
+                velocity.y -= 25 * dt; // 重力
 
-                // 計算移動方向
-                dir.z = Number(moveF) - Number(moveB);
-                dir.x = Number(moveR) - Number(moveL);
-                dir.normalize();
+                // 取得前進方向
+                const direction = new THREE.Vector3();
+                const forward = new THREE.Vector3();
+                camera.getWorldDirection(forward);
+                forward.y = 0; forward.normalize();
+                const right = new THREE.Vector3().crossVectors(camera.up, forward).normalize();
 
-                // 水平移動與「牆壁」碰撞檢查
-                const worldDir = new THREE.Vector3();
-                camera.getWorldDirection(worldDir);
-                worldDir.y = 0; worldDir.normalize(); // 取得水平朝向
-
-                if (moveF || moveB) {
-                    const fwd = worldDir.clone().multiplyScalar(dir.z);
-                    if (!checkCollision(fwd)) vel.z -= dir.z * 100 * dt;
+                const moveDir = new THREE.Vector3(0, 0, 0);
+                if (moveF) moveDir.add(forward);
+                if (moveB) moveDir.sub(forward);
+                if (moveL) moveDir.add(right);
+                if (moveR) moveDir.sub(right);
+                
+                if (moveDir.length() > 0) {
+                    moveDir.normalize();
+                    velocity.x += moveDir.x * 60 * dt;
+                    velocity.z += moveDir.z * 60 * dt;
                 }
-                if (moveL || moveR) {
-                    const side = new THREE.Vector3().crossVectors(camera.up, worldDir).multiplyScalar(dir.x);
-                    if (!checkCollision(side.negate())) vel.x -= dir.x * 100 * dt;
+
+                // --- 分軸移動與碰撞 ---
+                // 1. 嘗試移動 X
+                const nextX = camera.position.x + velocity.x * dt;
+                if (!isColliding(nextX, camera.position.y, camera.position.z)) {
+                    camera.position.x = nextX;
+                } else {
+                    velocity.x = 0;
                 }
 
-                controls.moveRight(-vel.x * dt);
-                controls.moveForward(-vel.z * dt);
+                // 2. 嘗試移動 Z
+                const nextZ = camera.position.z + velocity.z * dt;
+                if (!isColliding(camera.position.x, camera.position.y, nextZ)) {
+                    camera.position.z = nextZ;
+                } else {
+                    velocity.z = 0;
+                }
 
-                // 地面碰撞檢查
-                groundRay.set(camera.position, new THREE.Vector3(0, -1, 0));
-                const gHits = groundRay.intersectObjects(blocks);
-                let onObj = false;
-                if (gHits.length > 0 && gHits[0].distance <= 1.8) onObj = true;
+                // 3. 處理 Y (垂直)
+                camera.position.y += velocity.y * dt;
+                
+                // 地面判定
+                let onGround = false;
+                if (isColliding(camera.position.x, camera.position.y - 0.1, camera.position.z)) {
+                    onGround = true;
+                }
 
-                if (onObj) {
-                    vel.y = Math.max(0, vel.y);
+                if (onGround) {
+                    if (velocity.y < 0) {
+                        velocity.y = 0;
+                        canJump = true;
+                    }
+                    // 修正 Y 座標到方塊頂部，防止掉進地板
+                    camera.position.y = Math.ceil(camera.position.y - 0.5) + 0.8;
+                }
+
+                // 保底高度 (防止掉出地圖)
+                if (camera.position.y < 1.8) {
+                    camera.position.y = 1.8;
+                    velocity.y = 0;
                     canJump = true;
                 }
-                camera.position.y += (vel.y * dt);
 
-                // 保底高度
-                if (camera.position.y < 1.8) { vel.y = 0; camera.position.y = 1.8; canJump = true; }
                 prevT = t;
             }
             renderer.render(scene, camera);
