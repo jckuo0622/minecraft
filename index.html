@@ -3,21 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Web - 視覺與物理升級版</title>
+    <title>Minecraft Web - 完整物理與視覺版</title>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; }
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: "Microsoft JhengHei", sans-serif; }
+        
+        /* 1. 登錄介面樣式 */
         #overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; justify-content: center; align-items: center;
-            background: linear-gradient(to bottom, #00b4ff, #00a859);
+            background: linear-gradient(to bottom, #00b4ff 0%, #0072ff 30%, #00a859 100%);
             z-index: 100; text-align: center; color: white;
         }
+
+        .title-area h1 { font-size: 70px; margin: 0; text-shadow: 4px 4px 0px #006699; }
+        
         .play-button {
-            margin: 20px 0; background: #00aa44; border: none; padding: 15px 40px; 
-            font-size: 28px; color: white; border-radius: 10px; cursor: pointer;
-            box-shadow: 0px 6px 0px #005511; transition: 0.1s;
+            margin: 30px 0; background: linear-gradient(to bottom, #00cc44, #008822);
+            border: none; padding: 15px 40px; font-size: 28px; color: white;
+            border-radius: 10px; cursor: pointer; box-shadow: 0px 6px 0px #005511;
+            transition: transform 0.1s;
         }
         .play-button:active { transform: translateY(4px); box-shadow: 0px 2px 0px #005511; }
+
+        .controls-card {
+            background-color: rgba(0, 80, 120, 0.6); border-radius: 15px; padding: 20px;
+            text-align: left; border: 1px solid rgba(255, 255, 255, 0.2); font-size: 18px;
+        }
+
+        /* 2. 遊戲中介面 */
         #crosshair {
             position: absolute; top: 50%; left: 50%; width: 16px; height: 16px;
             border: 2px solid white; transform: translate(-50%, -50%);
@@ -28,29 +41,36 @@
 <body>
 
     <div id="crosshair"></div>
+
+    <!-- 登錄介面 -->
     <div id="overlay">
-        <div>
-            <h1 style="font-size: 60px; text-shadow: 4px 4px #006699;">MINECRAFT</h1>
-            <p>已加入：像素貼圖、重力模擬、跳躍功能</p>
+        <div class="container">
+            <div class="title-area">
+                <h1>MINECRAFT</h1>
+                <div style="font-size: 20px; margin-top: 5px;">網頁開發版</div>
+            </div>
             <button class="play-button" id="btn-play">開始遊戲</button>
-            <div style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 10px; text-align: left;">
-                <li><b>W/A/S/D</b>：移動</li>
-                <li><b>空白鍵 (Space)</b>：跳躍</li>
-                <li><b>滑鼠左鍵</b>：破壞方塊</li>
-                <li><b>滑鼠右鍵</b>：放置方塊</li>
+            <div class="controls-card">
+                <div>🖱️ 點擊左鍵 - 破壞方塊</div>
+                <div>🖱️ 點擊右鍵 - 放置方塊</div>
+                <div>⌨️ W/A/S/D - 移動方向</div>
+                <div>⌨️ 空白鍵 - 跳躍 (可跳上地面方塊)</div>
+                <div>⌨️ ESC - 暫停 / 回到選單</div>
             </div>
         </div>
     </div>
+
+    <!-- 遊戲容器 -->
+    <div id="game-container"></div>
 
     <script type="module">
         import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
         import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/PointerLockControls.js';
 
-        // --- 1. 視覺升級：動態生成像素貼圖 ---
+        // --- A. 視覺升級：生成像素貼圖 ---
         function createPixelTexture(color1, color2) {
             const canvas = document.createElement('canvas');
-            canvas.width = 16;
-            canvas.height = 16;
+            canvas.width = 16; canvas.height = 16;
             const context = canvas.getContext('2d');
             for (let x = 0; x < 16; x++) {
                 for (let y = 0; y < 16; y++) {
@@ -59,14 +79,13 @@
                 }
             }
             const texture = new THREE.CanvasTexture(canvas);
-            texture.magFilter = THREE.NearestFilter; // 關鍵：保持像素感，不模糊
+            texture.magFilter = THREE.NearestFilter; // 保持像素銳利
             return texture;
         }
 
         const grassTopTex = createPixelTexture('#5dad44', '#77bc43');
         const dirtTex = createPixelTexture('#8b5a2b', '#7a4e25');
 
-        // 定義草地材料（上方綠色，側面與下方泥土色）
         const grassMaterials = [
             new THREE.MeshLambertMaterial({ map: dirtTex }), // 右
             new THREE.MeshLambertMaterial({ map: dirtTex }), // 左
@@ -76,56 +95,51 @@
             new THREE.MeshLambertMaterial({ map: dirtTex }), // 後
         ];
 
-        // --- 2. 初始化場景 ---
+        // --- B. 初始化 3D 場景 ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: false }); // 關閉反鋸齒增加像素感
+        const renderer = new THREE.WebGLRenderer({ antialias: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
+        document.getElementById('game-container').appendChild(renderer.domElement);
 
+        // 燈光
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.4);
+        sunLight.position.set(5, 15, 5);
+        scene.add(sunLight);
+
+        // 控制器
         const controls = new PointerLockControls(camera, document.body);
         const btnPlay = document.getElementById('btn-play');
         const overlay = document.getElementById('overlay');
+        const crosshair = document.getElementById('crosshair');
+
         btnPlay.addEventListener('click', () => controls.lock());
+        controls.addEventListener('lock', () => { overlay.style.display = 'none'; crosshair.style.display = 'block'; });
+        controls.addEventListener('unlock', () => { overlay.style.display = 'flex'; crosshair.style.display = 'none'; });
 
-        controls.addEventListener('lock', () => {
-            overlay.style.display = 'none';
-            document.getElementById('crosshair').style.display = 'block';
-        });
-
-        controls.addEventListener('unlock', () => {
-            overlay.style.display = 'flex';
-            document.getElementById('crosshair').style.display = 'none';
-        });
-
-        // --- 3. 物理與移動變數 ---
-        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-        let canJump = false;
-        const velocity = new THREE.Vector3();
-        const direction = new THREE.Vector3();
-
-        // --- 4. 生成世界 ---
+        // --- C. 世界生成 ---
         const boxGeo = new THREE.BoxGeometry(1, 1, 1);
         const blocks = [];
-        for(let x = -10; x < 10; x++) {
-            for(let z = -10; z < 10; z++) {
+        for(let x = -12; x < 12; x++) {
+            for(let z = -12; z < 12; z++) {
                 const mesh = new THREE.Mesh(boxGeo, grassMaterials);
                 mesh.position.set(x, 0, z);
                 scene.add(mesh);
                 blocks.push(mesh);
             }
         }
-
-        const light = new THREE.AmbientLight(0xffffff, 0.8);
-        scene.add(light);
-        const sunLight = new THREE.DirectionalLight(0xffffff, 0.5);
-        sunLight.position.set(5, 10, 2);
-        scene.add(sunLight);
-
         camera.position.set(0, 2, 5);
 
-        // --- 5. 監聽鍵盤 ---
+        // --- D. 物理與移動設定 ---
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let canJump = false;
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        const groundRaycaster = new THREE.Raycaster(); // 向下偵測地面的射線
+
         document.addEventListener('keydown', (e) => {
             switch (e.code) {
                 case 'KeyW': moveForward = true; break;
@@ -144,10 +158,10 @@
             }
         });
 
-        // --- 6. 互動功能 (破壞與放置) ---
-        const raycaster = new THREE.Raycaster();
+        // 放置與破壞
         window.addEventListener('mousedown', (e) => {
             if (!controls.isLocked) return;
+            const raycaster = new THREE.Raycaster();
             raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
             const intersects = raycaster.intersectObjects(blocks);
             if (intersects.length > 0) {
@@ -164,7 +178,7 @@
             }
         });
 
-        // --- 7. 遊戲迴圈：處理物理模擬 ---
+        // --- E. 遊戲迴圈 (Game Loop) ---
         let prevTime = performance.now();
         function animate() {
             requestAnimationFrame(animate);
@@ -172,10 +186,12 @@
                 const time = performance.now();
                 const delta = (time - prevTime) / 1000;
 
-                // 阻力與重力更新
+                // 1. 處理水平移動阻力
                 velocity.x -= velocity.x * 10.0 * delta;
                 velocity.z -= velocity.z * 10.0 * delta;
-                velocity.y -= 9.8 * 3.5 * delta; // 模擬重力 $g = 9.8$
+
+                // 2. 處理重力
+                velocity.y -= 9.8 * 3.5 * delta; // 重力加速度
 
                 direction.z = Number(moveForward) - Number(moveBackward);
                 direction.x = Number(moveRight) - Number(moveLeft);
@@ -187,9 +203,28 @@
                 controls.moveRight(-velocity.x * delta);
                 controls.moveForward(-velocity.z * delta);
 
-                // 垂直位移與地面檢測
+                // 3. 核心：地面碰撞偵測
+                groundRaycaster.set(camera.position, new THREE.Vector3(0, -1, 0));
+                const groundIntersects = groundRaycaster.intersectObjects(blocks);
+                
+                let onObject = false;
+                if (groundIntersects.length > 0) {
+                    const dist = groundIntersects[0].distance;
+                    if (dist <= 1.8) { // 玩家視線高度到腳底的距離
+                        onObject = true;
+                    }
+                }
+
+                if (onObject === true) {
+                    velocity.y = Math.max(0, velocity.y); // 踩到東西就停止下落
+                    canJump = true;
+                }
+
+                // 4. 更新垂直位置
                 camera.position.y += (velocity.y * delta);
-                if (camera.position.y < 1.8) { // 假設玩家身高為 1.8 單位
+
+                // 世界底部保底 (防止掉進虛空)
+                if (camera.position.y < 1.8) {
                     velocity.y = 0;
                     camera.position.y = 1.8;
                     canJump = true;
