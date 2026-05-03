@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Web - 穩定物理版</title>
+    <title>Minecraft Web - 物理修正版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: "Microsoft JhengHei", sans-serif; }
         #overlay {
@@ -30,11 +30,11 @@
     <div id="overlay">
         <div>
             <h1 style="font-size: 60px; text-shadow: 4px 4px #006699;">MINECRAFT</h1>
-            <p>穩定性修正：解決落地彈跳與位置偏移</p>
+            <p>修正：解決平地無法移動、優化跳躍判定</p>
             <button class="play-button" id="btn-play">開始遊戲</button>
             <div style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 10px; text-align: left;">
-                <li><b>流暢落地</b>：現在站在方塊上會非常穩定</li>
-                <li><b>碰撞優化</b>：解決了物理偵測的邏輯衝突</li>
+                <li><b>W/A/S/D</b>：平地現在可以正常行走了</li>
+                <li><b>空白鍵</b>：跳躍後可順利登上前方方塊</li>
             </div>
         </div>
     </div>
@@ -45,7 +45,7 @@
         import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
         import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/PointerLockControls.js';
 
-        // --- 1. 貼圖生成 (不變) ---
+        // --- 1. 貼圖生成 ---
         function createPixelTexture(c1, c2) {
             const canvas = document.createElement('canvas');
             canvas.width = 16; canvas.height = 16;
@@ -90,13 +90,13 @@
             blocks.push(m);
         }
         scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-        camera.position.set(0, 2, 5); // 初始位置
+        camera.position.set(0, 2, 5);
 
         // --- 4. 物理與移動變數 ---
         let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false;
         const velocity = new THREE.Vector3();
-        const playerRadius = 0.35;
-        const playerHeight = 1.8; // 視線高度
+        const playerRadius = 0.3; // 稍微縮小碰撞半徑
+        const playerHeight = 1.7; // 視線高度
 
         document.addEventListener('keydown', (e) => {
             if(e.code==='KeyW') moveF=true; if(e.code==='KeyS') moveB=true;
@@ -127,15 +127,15 @@
             }
         });
 
-        // --- 5. 修正後的碰撞偵測 ---
+        // --- 5. 修正後的碰撞偵測 (關鍵修改處) ---
         function isColliding(x, y, z) {
             for (let block of blocks) {
                 const b = block.position;
-                // 檢查玩家 Hitbox (AABB)
                 if (
                     x + playerRadius > b.x - 0.5 && x - playerRadius < b.x + 0.5 &&
                     z + playerRadius > b.z - 0.5 && z - playerRadius < b.z + 0.5 &&
-                    y - playerHeight < b.y + 0.5 && y > b.y - 0.5
+                    // 重點：y - playerHeight + 0.2 讓腳底稍微高出一點，不偵測正在踩的地面
+                    y - playerHeight + 0.2 < b.y + 0.5 && y > b.y - 0.5
                 ) {
                     return true;
                 }
@@ -151,10 +151,9 @@
                 const t = performance.now();
                 const dt = Math.min((t - prevT) / 1000, 0.1);
 
-                // 阻力與重力
                 velocity.x -= velocity.x * 10 * dt;
                 velocity.z -= velocity.z * 10 * dt;
-                velocity.y -= 30 * dt; // 加強一點重力感
+                velocity.y -= 28 * dt; 
 
                 const forward = new THREE.Vector3();
                 camera.getWorldDirection(forward);
@@ -173,51 +172,45 @@
                     velocity.z += moveDir.z * 60 * dt;
                 }
 
-                // 分軸碰撞檢測
+                // X 軸移動
                 const nextX = camera.position.x + velocity.x * dt;
                 if (!isColliding(nextX, camera.position.y, camera.position.z)) {
                     camera.position.x = nextX;
                 } else { velocity.x = 0; }
 
+                // Z 軸移動
                 const nextZ = camera.position.z + velocity.z * dt;
                 if (!isColliding(camera.position.x, camera.position.y, nextZ)) {
                     camera.position.z = nextZ;
                 } else { velocity.z = 0; }
 
-                // --- 垂直移動優化 (解決彈跳關鍵) ---
+                // Y 軸與地面判定
                 camera.position.y += velocity.y * dt;
 
-                // 檢查腳下是否有方塊
                 let groundY = -Infinity;
                 for (let block of blocks) {
                     const b = block.position;
-                    // 如果玩家在方塊的正上方
-                    if (
-                        camera.position.x + playerRadius > b.x - 0.5 && 
-                        camera.position.x - playerRadius < b.x + 0.5 &&
-                        camera.position.z + playerRadius > b.z - 0.5 && 
-                        camera.position.z - playerRadius < b.z + 0.5
-                    ) {
-                        // 找到腳下最高的方塊頂部
-                        if (b.y + 0.5 > groundY && b.y + 0.5 <= camera.position.y - playerHeight + 0.5) {
+                    if (camera.position.x + playerRadius > b.x - 0.5 && camera.position.x - playerRadius < b.x + 0.5 &&
+                        camera.position.z + playerRadius > b.z - 0.5 && camera.position.z - playerRadius < b.z + 0.5) {
+                        if (b.y + 0.5 > groundY && b.y + 0.5 <= camera.position.y - playerHeight + 0.2) {
                             groundY = b.y + 0.5;
                         }
                     }
                 }
 
-                // 判斷是否落地：如果玩家腳底位置低於或等於最高方塊表面
                 const feetY = camera.position.y - playerHeight;
-                if (feetY <= groundY || camera.position.y <= playerHeight) {
-                    // 如果是從高處掉下來，則鎖定在地面高度
-                    const targetY = Math.max(groundY, 0) + playerHeight;
-                    
+                if (feetY <= groundY) {
                     if (velocity.y < 0) {
-                        camera.position.y = targetY;
+                        camera.position.y = groundY + playerHeight;
                         velocity.y = 0;
                         canJump = true;
                     }
+                } else if (camera.position.y <= playerHeight) {
+                    camera.position.y = playerHeight;
+                    velocity.y = 0;
+                    canJump = true;
                 } else {
-                    canJump = false; // 在空中不能跳
+                    canJump = false;
                 }
 
                 prevT = t;
