@@ -3,227 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Web - 物理修正版</title>
-    <style>
-        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: "Microsoft JhengHei", sans-serif; }
-        #overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            display: flex; justify-content: center; align-items: center;
-            background: linear-gradient(to bottom, #00b4ff, #00a859);
-            z-index: 100; text-align: center; color: white;
-        }
-        .play-button {
-            margin: 20px 0; background: #00aa44; border: none; padding: 15px 40px; 
-            font-size: 28px; color: white; border-radius: 10px; cursor: pointer;
-            box-shadow: 0px 6px 0px #005511;
-        }
-        #crosshair {
-            position: absolute; top: 50%; left: 50%; width: 16px; height: 16px;
-            border: 2px solid white; transform: translate(-50%, -50%);
-            z-index: 5; display: none; pointer-events: none;
-        }
-    </style>
+    <title>Minecraft Web - 模組化版本</title>
+    <!-- 引入外部 CSS -->
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
+    <!-- 遊戲中準心 -->
     <div id="crosshair"></div>
+
+    <!-- 登錄介面 -->
     <div id="overlay">
-        <div>
-            <h1 style="font-size: 60px; text-shadow: 4px 4px #006699;">MINECRAFT</h1>
-            <p>修正：解決平地無法移動、優化跳躍判定</p>
+        <div class="container">
+            <h1 class="game-title">MINECRAFT</h1>
+            <p>模組化開發版本：物理、視覺與邏輯分離</p>
             <button class="play-button" id="btn-play">開始遊戲</button>
-            <div style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 10px; text-align: left;">
-                <li><b>W/A/S/D</b>：平地現在可以正常行走了</li>
-                <li><b>空白鍵</b>：跳躍後可順利登上前方方塊</li>
+            <div class="controls-card">
+                <ul>
+                    <li><b>W/A/S/D</b>：移動方向</li>
+                    <li><b>空白鍵</b>：跳躍</li>
+                    <li><b>左鍵 / 右鍵</b>：破壞與建造</li>
+                    <li><b>ESC</b>：暫停並回到選單</li>
+                </ul>
             </div>
         </div>
     </div>
 
+    <!-- 3D 渲染容器 -->
     <div id="game-container"></div>
 
-    <script type="module">
-        import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
-        import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/PointerLockControls.js';
-
-        // --- 1. 貼圖生成 ---
-        function createPixelTexture(c1, c2) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 16; canvas.height = 16;
-            const ctx = canvas.getContext('2d');
-            for(let x=0; x<16; x++) for(let y=0; y<16; y++) {
-                ctx.fillStyle = Math.random() > 0.5 ? c1 : c2;
-                ctx.fillRect(x,y,1,1);
-            }
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.magFilter = THREE.NearestFilter;
-            return tex;
-        }
-        const grassTop = createPixelTexture('#5dad44', '#77bc43');
-        const dirtSide = createPixelTexture('#8b5a2b', '#7a4e25');
-        const grassMaterials = [
-            new THREE.MeshLambertMaterial({map: dirtSide}), new THREE.MeshLambertMaterial({map: dirtSide}),
-            new THREE.MeshLambertMaterial({map: grassTop}), new THREE.MeshLambertMaterial({map: dirtSide}),
-            new THREE.MeshLambertMaterial({map: dirtSide}), new THREE.MeshLambertMaterial({map: dirtSide})
-        ];
-
-        // --- 2. 初始化 ---
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87CEEB);
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: false });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.getElementById('game-container').appendChild(renderer.domElement);
-
-        const controls = new PointerLockControls(camera, document.body);
-        const overlay = document.getElementById('overlay');
-        document.getElementById('btn-play').addEventListener('click', () => controls.lock());
-        controls.addEventListener('lock', () => { overlay.style.display = 'none'; document.getElementById('crosshair').style.display = 'block'; });
-        controls.addEventListener('unlock', () => { overlay.style.display = 'flex'; document.getElementById('crosshair').style.display = 'none'; });
-
-        // --- 3. 世界生成 ---
-        const boxGeo = new THREE.BoxGeometry(1,1,1);
-        const blocks = [];
-        for(let x=-10; x<10; x++) for(let z=-10; z<10; z++) {
-            const m = new THREE.Mesh(boxGeo, grassMaterials);
-            m.position.set(x, 0, z);
-            scene.add(m);
-            blocks.push(m);
-        }
-        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-        camera.position.set(0, 2, 5);
-
-        // --- 4. 物理與移動變數 ---
-        let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false;
-        const velocity = new THREE.Vector3();
-        const playerRadius = 0.3; // 稍微縮小碰撞半徑
-        const playerHeight = 1.7; // 視線高度
-
-        document.addEventListener('keydown', (e) => {
-            if(e.code==='KeyW') moveF=true; if(e.code==='KeyS') moveB=true;
-            if(e.code==='KeyA') moveL=true; if(e.code==='KeyD') moveR=true;
-            if(e.code==='Space' && canJump) { velocity.y += 11; canJump = false; }
-        });
-        document.addEventListener('keyup', (e) => {
-            if(e.code==='KeyW') moveF=false; if(e.code==='KeyS') moveB=false;
-            if(e.code==='KeyA') moveL=false; if(e.code==='KeyD') moveR=false;
-        });
-
-        // 破壞與建造
-        const raycaster = new THREE.Raycaster();
-        window.addEventListener('mousedown', (e) => {
-            if (!controls.isLocked) return;
-            raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
-            const inter = raycaster.intersectObjects(blocks);
-            if (inter.length > 0) {
-                if (e.button === 0) {
-                    scene.remove(inter[0].object);
-                    blocks.splice(blocks.indexOf(inter[0].object), 1);
-                } else if (e.button === 2) {
-                    const b = new THREE.Mesh(boxGeo, grassMaterials);
-                    b.position.copy(inter[0].object.position).add(inter[0].face.normal);
-                    scene.add(b);
-                    blocks.push(b);
-                }
-            }
-        });
-
-        // --- 5. 修正後的碰撞偵測 (關鍵修改處) ---
-        function isColliding(x, y, z) {
-            for (let block of blocks) {
-                const b = block.position;
-                if (
-                    x + playerRadius > b.x - 0.5 && x - playerRadius < b.x + 0.5 &&
-                    z + playerRadius > b.z - 0.5 && z - playerRadius < b.z + 0.5 &&
-                    // 重點：y - playerHeight + 0.2 讓腳底稍微高出一點，不偵測正在踩的地面
-                    y - playerHeight + 0.2 < b.y + 0.5 && y > b.y - 0.5
-                ) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        // --- 6. 遊戲迴圈 ---
-        let prevT = performance.now();
-        function animate() {
-            requestAnimationFrame(animate);
-            if (controls.isLocked) {
-                const t = performance.now();
-                const dt = Math.min((t - prevT) / 1000, 0.1);
-
-                velocity.x -= velocity.x * 10 * dt;
-                velocity.z -= velocity.z * 10 * dt;
-                velocity.y -= 28 * dt; 
-
-                const forward = new THREE.Vector3();
-                camera.getWorldDirection(forward);
-                forward.y = 0; forward.normalize();
-                const right = new THREE.Vector3().crossVectors(camera.up, forward).normalize();
-
-                const moveDir = new THREE.Vector3(0, 0, 0);
-                if (moveF) moveDir.add(forward);
-                if (moveB) moveDir.sub(forward);
-                if (moveL) moveDir.add(right);
-                if (moveR) moveDir.sub(right);
-                
-                if (moveDir.length() > 0) {
-                    moveDir.normalize();
-                    velocity.x += moveDir.x * 60 * dt;
-                    velocity.z += moveDir.z * 60 * dt;
-                }
-
-                // X 軸移動
-                const nextX = camera.position.x + velocity.x * dt;
-                if (!isColliding(nextX, camera.position.y, camera.position.z)) {
-                    camera.position.x = nextX;
-                } else { velocity.x = 0; }
-
-                // Z 軸移動
-                const nextZ = camera.position.z + velocity.z * dt;
-                if (!isColliding(camera.position.x, camera.position.y, nextZ)) {
-                    camera.position.z = nextZ;
-                } else { velocity.z = 0; }
-
-                // Y 軸與地面判定
-                camera.position.y += velocity.y * dt;
-
-                let groundY = -Infinity;
-                for (let block of blocks) {
-                    const b = block.position;
-                    if (camera.position.x + playerRadius > b.x - 0.5 && camera.position.x - playerRadius < b.x + 0.5 &&
-                        camera.position.z + playerRadius > b.z - 0.5 && camera.position.z - playerRadius < b.z + 0.5) {
-                        if (b.y + 0.5 > groundY && b.y + 0.5 <= camera.position.y - playerHeight + 0.2) {
-                            groundY = b.y + 0.5;
-                        }
-                    }
-                }
-
-                const feetY = camera.position.y - playerHeight;
-                if (feetY <= groundY) {
-                    if (velocity.y < 0) {
-                        camera.position.y = groundY + playerHeight;
-                        velocity.y = 0;
-                        canJump = true;
-                    }
-                } else if (camera.position.y <= playerHeight) {
-                    camera.position.y = playerHeight;
-                    velocity.y = 0;
-                    canJump = true;
-                } else {
-                    canJump = false;
-                }
-
-                prevT = t;
-            }
-            renderer.render(scene, camera);
-        }
-        animate();
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth/window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-    </script>
+    <!-- 引入外部 JavaScript (注意 type="module") -->
+    <script type="module" src="game.js"></script>
 </body>
 </html>
