@@ -54,7 +54,7 @@ camera.position.set(0, 2, 5);
 let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false, isCrouching = false;
 const velocity = new THREE.Vector3();
 const playerRadius = 0.3;
-let playerHeight = 1.7; // 基礎視線高度
+let playerHeight = 1.7;
 
 // --- D. 監聽控制 ---
 document.addEventListener('keydown', (e) => {
@@ -98,13 +98,14 @@ window.addEventListener('mousedown', (e) => {
     }
 });
 
-// --- E. 物理碰撞判定 ---
+// --- E. 物理判定輔助函式 ---
+
+// 檢查某座標是否有身體碰撞
 function isColliding(x, y, z, checkType = 'body') {
     for (let block of blocks) {
         const b = block.position;
         const inX = x + playerRadius > b.x - 0.5 && x - playerRadius < b.x + 0.5;
         const inZ = z + playerRadius > b.z - 0.5 && z - playerRadius < b.z + 0.5;
-        
         if (inX && inZ) {
             if (checkType === 'body') {
                 if (y - 1.3 < b.y + 0.5 && y + 0.1 > b.y - 0.5) return true;
@@ -116,17 +117,20 @@ function isColliding(x, y, z, checkType = 'body') {
     return false;
 }
 
-// 輔助函式：檢查某個位置腳下是否有地面
-function hasGroundBelow(x, z, currentY) {
+// 取得某 XZ 座標腳下的地面高度
+function getGroundY(x, z, currentY) {
+    let highest = -Infinity;
     for (let block of blocks) {
         const b = block.position;
         if (x + playerRadius > b.x - 0.5 && x - playerRadius < b.x + 0.5 &&
             z + playerRadius > b.z - 0.5 && z - playerRadius < b.z + 0.5) {
-            // 如果方塊表面剛好在腳下位置
-            if (Math.abs((currentY - playerHeight) - (b.y + 0.5)) < 0.2) return true;
+            // 只找腳底下的方塊
+            if (b.y + 0.5 <= currentY - playerHeight + 0.25) {
+                if (b.y + 0.5 > highest) highest = b.y + 0.5;
+            }
         }
     }
-    return false;
+    return highest;
 }
 
 // --- F. 遊戲主迴圈 ---
@@ -137,11 +141,11 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.1);
 
-        // 處理潛行時的高度與速度
+        // 潛行狀態設定
         let speedMultiplier = 60;
         if (isCrouching && canJump) {
-            playerHeight = 1.4; // 蹲下時相機變低
-            speedMultiplier = 25; // 蹲下走得慢
+            playerHeight = 1.4;
+            speedMultiplier = 25;
         } else {
             playerHeight = 1.7;
         }
@@ -167,49 +171,47 @@ function animate() {
             velocity.z += moveDir.z * speedMultiplier * dt;
         }
 
-        // --- 移動與邊緣保護邏輯 ---
-        const nextX = camera.position.x + velocity.x * dt;
-        const nextZ = camera.position.z + velocity.z * dt;
+        // --- 核心：分軸移動與潛行防掉落 ---
+        
+        // 1. 取得移動前的地面高度
+        const currentGroundY = getGroundY(camera.position.x, camera.position.z, camera.position.y);
 
-        // X 軸移動判定
+        // 2. 處理 X 軸位移
+        const nextX = camera.position.x + velocity.x * dt;
         let canMoveX = !isColliding(nextX, camera.position.y, camera.position.z, 'body');
+        
         if (isCrouching && canJump && canMoveX) {
-            // 如果蹲下且在地面，檢查下一步腳下是否還有方塊
-            if (!hasGroundBelow(nextX, camera.position.z, camera.position.y)) canMoveX = false;
+            const nextGroundX = getGroundY(nextX, camera.position.z, camera.position.y);
+            // 如果下一步地面的高度變低了，就停止移動
+            if (nextGroundX < currentGroundY) canMoveX = false;
         }
         if (canMoveX) camera.position.x = nextX; else velocity.x = 0;
 
-        // Z 軸移動判定
+        // 3. 處理 Z 軸位移
+        const nextZ = camera.position.z + velocity.z * dt;
         let canMoveZ = !isColliding(camera.position.x, camera.position.y, nextZ, 'body');
+        
         if (isCrouching && canJump && canMoveZ) {
-            if (!hasGroundBelow(camera.position.x, nextZ, camera.position.y)) canMoveZ = false;
+            const nextGroundZ = getGroundY(camera.position.x, nextZ, camera.position.y);
+            if (nextGroundZ < currentGroundY) canMoveZ = false;
         }
         if (canMoveZ) camera.position.z = nextZ; else velocity.z = 0;
 
-        // 垂直移動
+        // 4. 處理垂直位移
         camera.position.y += velocity.y * dt;
 
-        // 頭頂撞擊
+        // 5. 頭頂撞擊
         if (velocity.y > 0 && isColliding(camera.position.x, camera.position.y, camera.position.z, 'head')) {
             velocity.y = 0; 
         }
 
-        // 地面判定
-        let groundY = -Infinity;
-        for (let block of blocks) {
-            const b = block.position;
-            if (camera.position.x + playerRadius > b.x - 0.5 && camera.position.x - playerRadius < b.x + 0.5 &&
-                camera.position.z + playerRadius > b.z - 0.5 && camera.position.z - playerRadius < b.z + 0.5) {
-                if (b.y + 0.5 > groundY && b.y + 0.5 <= camera.position.y - playerHeight + 0.2) {
-                    groundY = b.y + 0.5;
-                }
-            }
-        }
-
+        // 6. 最終落地判定
+        const finalGroundY = getGroundY(camera.position.x, camera.position.z, camera.position.y);
         const feetY = camera.position.y - playerHeight;
-        if (feetY <= groundY) {
+
+        if (feetY <= finalGroundY) {
             if (velocity.y < 0) {
-                camera.position.y = groundY + playerHeight;
+                camera.position.y = (finalGroundY === -Infinity ? 0 : finalGroundY) + playerHeight;
                 velocity.y = 0;
                 canJump = true;
             }
@@ -220,6 +222,7 @@ function animate() {
         } else {
             canJump = false;
         }
+        
         prevT = t;
     }
     renderer.render(scene, camera);
