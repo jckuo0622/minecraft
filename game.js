@@ -53,7 +53,7 @@ camera.position.set(0, 2, 5);
 
 let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false, isCrouching = false;
 const velocity = new THREE.Vector3();
-const playerRadius = 0.3; // 碰撞半徑
+const playerRadius = 0.3; // 玩家半徑
 let playerHeight = 1.7;   // 視線高度
 
 // --- D. 監聽控制 ---
@@ -98,15 +98,14 @@ window.addEventListener('mousedown', (e) => {
     }
 });
 
-// --- E. 物理判定輔助 ---
+// --- E. 物理判定輔助函式 ---
 
-// 檢查特定座標是否有方塊體積碰撞
+// 1. 檢查身體碰撞
 function isColliding(x, y, z, checkType = 'body') {
     for (let block of blocks) {
         const b = block.position;
-        const inX = x + playerRadius > b.x - 0.5 && x - playerRadius < b.x + 0.5;
-        const inZ = z + playerRadius > b.z - 0.5 && z - playerRadius < b.z + 0.5;
-        if (inX && inZ) {
+        if (x + playerRadius > b.x - 0.5 && x - playerRadius < b.x + 0.5 &&
+            z + playerRadius > b.z - 0.5 && z - playerRadius < b.z + 0.5) {
             if (checkType === 'body') {
                 if (y - 1.3 < b.y + 0.5 && y + 0.1 > b.y - 0.5) return true;
             } else if (checkType === 'head') {
@@ -117,14 +116,17 @@ function isColliding(x, y, z, checkType = 'body') {
     return false;
 }
 
-// 關鍵：偵測特定點下方是否有支撐平面
-function checkSupport(x, z, y) {
+// 2. 核心：檢查玩家腳下的 AABB 是否與任何方塊重疊
+function hasSupportAt(x, z, y) {
     const feetY = y - playerHeight;
     for (let block of blocks) {
         const b = block.position;
-        // 檢查該點是否落在方塊的水平範圍內
-        if (x > b.x - 0.5 && x < b.x + 0.5 && z > b.z - 0.5 && z < b.z + 0.5) {
-            // 且方塊頂部就在腳下不遠處
+        // 判斷玩家的碰撞箱 (x±radius, z±radius) 是否與方塊 (b.x±0.5, b.z±0.5) 有交集
+        const intersectX = (x + playerRadius > b.x - 0.5) && (x - playerRadius < b.x + 0.5);
+        const intersectZ = (z + playerRadius > b.z - 0.5) && (z - playerRadius < b.z + 0.5);
+        
+        if (intersectX && intersectZ) {
+            // 且該方塊頂面就在腳下 (允許微小誤差)
             if (Math.abs(feetY - (b.y + 0.5)) < 0.3) return true;
         }
     }
@@ -139,11 +141,11 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.1);
 
-        // 潛行狀態設定
+        // 潛行參數
         let speedMultiplier = 60;
         if (isCrouching && canJump) {
             playerHeight = 1.4;
-            speedMultiplier = 20; // 蹲下走更慢以提高判定準確度
+            speedMultiplier = 20; 
         } else {
             playerHeight = 1.7;
         }
@@ -169,50 +171,48 @@ function animate() {
             velocity.z += moveDir.z * speedMultiplier * dt;
         }
 
-        // --- 分軸移動與邊緣鎖定邏輯 ---
+        // --- 分軸移動與強勢鎖定 ---
         
-        // 1. X 軸移動
+        // 處理 X 軸
         let nextX = camera.position.x + velocity.x * dt;
         let canMoveX = !isColliding(nextX, camera.position.y, camera.position.z, 'body');
         
         if (isCrouching && canJump && canMoveX) {
-            // 潛行時，檢查移動方向的最前緣點 (中心點 + 移動方向*半徑) 下方是否有支撐
-            let checkX = nextX + (velocity.x > 0 ? playerRadius : -playerRadius);
-            if (!checkSupport(checkX, camera.position.z, camera.position.y)) {
+            // 如果移動後「整個足跡」都離開了方塊，就強制停止
+            if (!hasSupportAt(nextX, camera.position.z, camera.position.y)) {
                 canMoveX = false;
                 velocity.x = 0;
             }
         }
         if (canMoveX) camera.position.x = nextX;
 
-        // 2. Z 軸移動
+        // 處理 Z 軸
         let nextZ = camera.position.z + velocity.z * dt;
         let canMoveZ = !isColliding(camera.position.x, camera.position.y, nextZ, 'body');
         
         if (isCrouching && canJump && canMoveZ) {
-            let checkZ = nextZ + (velocity.z > 0 ? playerRadius : -playerRadius);
-            if (!checkSupport(camera.position.x, checkZ, camera.position.y)) {
+            if (!hasSupportAt(camera.position.x, nextZ, camera.position.y)) {
                 canMoveZ = false;
                 velocity.z = 0;
             }
         }
         if (canMoveZ) camera.position.z = nextZ;
 
-        // 3. 垂直移動
+        // 垂直移動
         camera.position.y += velocity.y * dt;
 
-        // 4. 頭頂撞擊
+        // 頭頂撞擊
         if (velocity.y > 0 && isColliding(camera.position.x, camera.position.y, camera.position.z, 'head')) {
             velocity.y = 0; 
         }
 
-        // 5. 落地判定
+        // 落地判定 (尋找當前位置腳下最高的方塊)
         let groundY = -Infinity;
         for (let block of blocks) {
             const b = block.position;
             if (camera.position.x + playerRadius > b.x - 0.5 && camera.position.x - playerRadius < b.x + 0.5 &&
                 camera.position.z + playerRadius > b.z - 0.5 && camera.position.z - playerRadius < b.z + 0.5) {
-                if (b.y + 0.5 > groundY && b.y + 0.5 <= camera.position.y - playerHeight + 0.2) {
+                if (b.y + 0.5 > groundY && b.y + 0.5 <= camera.position.y - playerHeight + 0.25) {
                     groundY = b.y + 0.5;
                 }
             }
@@ -225,7 +225,7 @@ function animate() {
                 velocity.y = 0;
                 canJump = true;
             }
-        } else if (camera.position.y <= playerHeight) {
+        } else if (camera.position.y <= playerHeight) { // 虛擬地板保底
             camera.position.y = playerHeight;
             velocity.y = 0;
             canJump = true;
