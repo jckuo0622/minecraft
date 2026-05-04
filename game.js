@@ -53,7 +53,7 @@ camera.position.set(0, 2, 5);
 
 let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false, isCrouching = false;
 const velocity = new THREE.Vector3();
-const playerRadius = 0.3; // 碰撞箱半徑
+const playerRadius = 0.3; // 碰撞半徑
 let playerHeight = 1.7;   // 視線高度
 
 // --- D. 監聽控制 ---
@@ -100,7 +100,7 @@ window.addEventListener('mousedown', (e) => {
 
 // --- E. 物理判定輔助 ---
 
-// 身體碰撞偵測
+// 檢查特定座標是否有方塊體積碰撞
 function isColliding(x, y, z, checkType = 'body') {
     for (let block of blocks) {
         const b = block.position;
@@ -117,14 +117,15 @@ function isColliding(x, y, z, checkType = 'body') {
     return false;
 }
 
-// 偵測指定位置是否有地板
-function isGroundBelow(x, z, y) {
+// 關鍵：偵測特定點下方是否有支撐平面
+function checkSupport(x, z, y) {
+    const feetY = y - playerHeight;
     for (let block of blocks) {
         const b = block.position;
-        // 只要玩家的 Hitbox 範圍內有任何方塊頂部能支撐玩家，就回傳 true
-        if (x + playerRadius > b.x - 0.5 && x - playerRadius < b.x + 0.5 &&
-            z + playerRadius > b.z - 0.5 && z - playerRadius < b.z + 0.5) {
-            if (Math.abs((y - playerHeight) - (b.y + 0.5)) < 0.3) return true;
+        // 檢查該點是否落在方塊的水平範圍內
+        if (x > b.x - 0.5 && x < b.x + 0.5 && z > b.z - 0.5 && z < b.z + 0.5) {
+            // 且方塊頂部就在腳下不遠處
+            if (Math.abs(feetY - (b.y + 0.5)) < 0.3) return true;
         }
     }
     return false;
@@ -138,11 +139,11 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.1);
 
-        // 潛行參數設定
+        // 潛行狀態設定
         let speedMultiplier = 60;
         if (isCrouching && canJump) {
             playerHeight = 1.4;
-            speedMultiplier = 22; // 蹲下走慢點更安全
+            speedMultiplier = 20; // 蹲下走更慢以提高判定準確度
         } else {
             playerHeight = 1.7;
         }
@@ -168,47 +169,44 @@ function animate() {
             velocity.z += moveDir.z * speedMultiplier * dt;
         }
 
-        // --- 核心改動：潛行防掉落與邊界限制 ---
-
-        // 先儲存移動前的座標
-        const oldX = camera.position.x;
-        const oldZ = camera.position.z;
-
-        // X 軸位移
-        const nextX = oldX + velocity.x * dt;
-        let canMoveX = !isColliding(nextX, camera.position.y, oldZ, 'body');
+        // --- 分軸移動與邊緣鎖定邏輯 ---
         
-        // 潛行檢查：如果 X 移動後會掉下去，則不更新 X
+        // 1. X 軸移動
+        let nextX = camera.position.x + velocity.x * dt;
+        let canMoveX = !isColliding(nextX, camera.position.y, camera.position.z, 'body');
+        
         if (isCrouching && canJump && canMoveX) {
-            if (!isGroundBelow(nextX, oldZ, camera.position.y)) {
+            // 潛行時，檢查移動方向的最前緣點 (中心點 + 移動方向*半徑) 下方是否有支撐
+            let checkX = nextX + (velocity.x > 0 ? playerRadius : -playerRadius);
+            if (!checkSupport(checkX, camera.position.z, camera.position.y)) {
                 canMoveX = false;
                 velocity.x = 0;
             }
         }
         if (canMoveX) camera.position.x = nextX;
 
-        // Z 軸位移
-        const nextZ = oldZ + velocity.z * dt;
+        // 2. Z 軸移動
+        let nextZ = camera.position.z + velocity.z * dt;
         let canMoveZ = !isColliding(camera.position.x, camera.position.y, nextZ, 'body');
         
-        // 潛行檢查：如果 Z 移動後會掉下去，則不更新 Z
         if (isCrouching && canJump && canMoveZ) {
-            if (!isGroundBelow(camera.position.x, nextZ, camera.position.y)) {
+            let checkZ = nextZ + (velocity.z > 0 ? playerRadius : -playerRadius);
+            if (!checkSupport(camera.position.x, checkZ, camera.position.y)) {
                 canMoveZ = false;
                 velocity.z = 0;
             }
         }
         if (canMoveZ) camera.position.z = nextZ;
 
-        // 垂直移動
+        // 3. 垂直移動
         camera.position.y += velocity.y * dt;
 
-        // 頭頂撞擊
+        // 4. 頭頂撞擊
         if (velocity.y > 0 && isColliding(camera.position.x, camera.position.y, camera.position.z, 'head')) {
             velocity.y = 0; 
         }
 
-        // 落地判定
+        // 5. 落地判定
         let groundY = -Infinity;
         for (let block of blocks) {
             const b = block.position;
