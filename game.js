@@ -53,8 +53,8 @@ camera.position.set(0, 2, 5);
 
 let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false, isCrouching = false;
 const velocity = new THREE.Vector3();
-const playerRadius = 0.3;
-let playerHeight = 1.7;
+const playerRadius = 0.3; // 碰撞箱半徑
+let playerHeight = 1.7;   // 視線高度
 
 // --- D. 監聽控制 ---
 document.addEventListener('keydown', (e) => {
@@ -98,9 +98,9 @@ window.addEventListener('mousedown', (e) => {
     }
 });
 
-// --- E. 物理判定輔助函式 ---
+// --- E. 物理判定輔助 ---
 
-// 檢查某座標是否有身體碰撞
+// 身體碰撞偵測
 function isColliding(x, y, z, checkType = 'body') {
     for (let block of blocks) {
         const b = block.position;
@@ -117,20 +117,17 @@ function isColliding(x, y, z, checkType = 'body') {
     return false;
 }
 
-// 取得某 XZ 座標腳下的地面高度
-function getGroundY(x, z, currentY) {
-    let highest = -Infinity;
+// 偵測指定位置是否有地板
+function isGroundBelow(x, z, y) {
     for (let block of blocks) {
         const b = block.position;
+        // 只要玩家的 Hitbox 範圍內有任何方塊頂部能支撐玩家，就回傳 true
         if (x + playerRadius > b.x - 0.5 && x - playerRadius < b.x + 0.5 &&
             z + playerRadius > b.z - 0.5 && z - playerRadius < b.z + 0.5) {
-            // 只找腳底下的方塊
-            if (b.y + 0.5 <= currentY - playerHeight + 0.25) {
-                if (b.y + 0.5 > highest) highest = b.y + 0.5;
-            }
+            if (Math.abs((y - playerHeight) - (b.y + 0.5)) < 0.3) return true;
         }
     }
-    return highest;
+    return false;
 }
 
 // --- F. 遊戲主迴圈 ---
@@ -141,11 +138,11 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.1);
 
-        // 潛行狀態設定
+        // 潛行參數設定
         let speedMultiplier = 60;
         if (isCrouching && canJump) {
             playerHeight = 1.4;
-            speedMultiplier = 25;
+            speedMultiplier = 22; // 蹲下走慢點更安全
         } else {
             playerHeight = 1.7;
         }
@@ -171,47 +168,62 @@ function animate() {
             velocity.z += moveDir.z * speedMultiplier * dt;
         }
 
-        // --- 核心：分軸移動與潛行防掉落 ---
-        
-        // 1. 取得移動前的地面高度
-        const currentGroundY = getGroundY(camera.position.x, camera.position.z, camera.position.y);
+        // --- 核心改動：潛行防掉落與邊界限制 ---
 
-        // 2. 處理 X 軸位移
-        const nextX = camera.position.x + velocity.x * dt;
-        let canMoveX = !isColliding(nextX, camera.position.y, camera.position.z, 'body');
+        // 先儲存移動前的座標
+        const oldX = camera.position.x;
+        const oldZ = camera.position.z;
+
+        // X 軸位移
+        const nextX = oldX + velocity.x * dt;
+        let canMoveX = !isColliding(nextX, camera.position.y, oldZ, 'body');
         
+        // 潛行檢查：如果 X 移動後會掉下去，則不更新 X
         if (isCrouching && canJump && canMoveX) {
-            const nextGroundX = getGroundY(nextX, camera.position.z, camera.position.y);
-            // 如果下一步地面的高度變低了，就停止移動
-            if (nextGroundX < currentGroundY) canMoveX = false;
+            if (!isGroundBelow(nextX, oldZ, camera.position.y)) {
+                canMoveX = false;
+                velocity.x = 0;
+            }
         }
-        if (canMoveX) camera.position.x = nextX; else velocity.x = 0;
+        if (canMoveX) camera.position.x = nextX;
 
-        // 3. 處理 Z 軸位移
-        const nextZ = camera.position.z + velocity.z * dt;
+        // Z 軸位移
+        const nextZ = oldZ + velocity.z * dt;
         let canMoveZ = !isColliding(camera.position.x, camera.position.y, nextZ, 'body');
         
+        // 潛行檢查：如果 Z 移動後會掉下去，則不更新 Z
         if (isCrouching && canJump && canMoveZ) {
-            const nextGroundZ = getGroundY(camera.position.x, nextZ, camera.position.y);
-            if (nextGroundZ < currentGroundY) canMoveZ = false;
+            if (!isGroundBelow(camera.position.x, nextZ, camera.position.y)) {
+                canMoveZ = false;
+                velocity.z = 0;
+            }
         }
-        if (canMoveZ) camera.position.z = nextZ; else velocity.z = 0;
+        if (canMoveZ) camera.position.z = nextZ;
 
-        // 4. 處理垂直位移
+        // 垂直移動
         camera.position.y += velocity.y * dt;
 
-        // 5. 頭頂撞擊
+        // 頭頂撞擊
         if (velocity.y > 0 && isColliding(camera.position.x, camera.position.y, camera.position.z, 'head')) {
             velocity.y = 0; 
         }
 
-        // 6. 最終落地判定
-        const finalGroundY = getGroundY(camera.position.x, camera.position.z, camera.position.y);
-        const feetY = camera.position.y - playerHeight;
+        // 落地判定
+        let groundY = -Infinity;
+        for (let block of blocks) {
+            const b = block.position;
+            if (camera.position.x + playerRadius > b.x - 0.5 && camera.position.x - playerRadius < b.x + 0.5 &&
+                camera.position.z + playerRadius > b.z - 0.5 && camera.position.z - playerRadius < b.z + 0.5) {
+                if (b.y + 0.5 > groundY && b.y + 0.5 <= camera.position.y - playerHeight + 0.2) {
+                    groundY = b.y + 0.5;
+                }
+            }
+        }
 
-        if (feetY <= finalGroundY) {
+        const feetY = camera.position.y - playerHeight;
+        if (feetY <= groundY) {
             if (velocity.y < 0) {
-                camera.position.y = (finalGroundY === -Infinity ? 0 : finalGroundY) + playerHeight;
+                camera.position.y = (groundY === -Infinity ? 0 : groundY) + playerHeight;
                 velocity.y = 0;
                 canJump = true;
             }
