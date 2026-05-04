@@ -32,9 +32,20 @@ document.getElementById('game-container').appendChild(renderer.domElement);
 
 const controls = new PointerLockControls(camera, document.body);
 const overlay = document.getElementById('overlay');
+// 取得 HTML 中的準心元素
+const crosshair = document.getElementById('crosshair');
+
 document.getElementById('btn-play').addEventListener('click', () => controls.lock());
-controls.addEventListener('lock', () => { overlay.style.display = 'none'; });
-controls.addEventListener('unlock', () => { overlay.style.display = 'flex'; });
+
+// 修改這裡：鎖定時顯示準心，解鎖時隱藏
+controls.addEventListener('lock', () => { 
+    overlay.style.display = 'none'; 
+    crosshair.style.display = 'block'; 
+});
+controls.addEventListener('unlock', () => { 
+    overlay.style.display = 'flex'; 
+    crosshair.style.display = 'none'; 
+});
 
 // --- 3. 世界生成 ---
 const boxGeo = new THREE.BoxGeometry(1,1,1);
@@ -52,13 +63,13 @@ camera.position.set(0, 1.7, 5);
 let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false, isCrouching = false;
 const velocity = new THREE.Vector3();
 const playerRadius = 0.3;
-let currentHeight = 1.7; // 動態高度
+let currentHeight = 1.7;
 
 document.addEventListener('keydown', (e) => {
     if(e.code==='KeyW') moveF=true; if(e.code==='KeyS') moveB=true;
     if(e.code==='KeyA') moveL=true; if(e.code==='KeyD') moveR=true;
     if(e.code==='Space' && canJump) { velocity.y += 8.5; canJump = false; }
-    if(e.shiftKey) isCrouching = true; // 使用 shiftKey 判定更穩定
+    if(e.shiftKey) isCrouching = true;
 });
 document.addEventListener('keyup', (e) => {
     if(e.code==='KeyW') moveF=false; if(e.code==='KeyS') moveB=false;
@@ -68,7 +79,7 @@ document.addEventListener('keyup', (e) => {
 
 // --- 5. 核心判定函數 ---
 function getGroundAt(x, z) {
-    let maxH = -1; // 虛擬世界保底高度
+    let maxH = -1;
     for (let b of blocks) {
         if (x + playerRadius > b.position.x - 0.5 && x - playerRadius < b.position.x + 0.5 &&
             z + playerRadius > b.position.z - 0.5 && z - playerRadius < b.position.z + 0.5) {
@@ -82,7 +93,6 @@ function checkWall(x, y, z) {
     for (let b of blocks) {
         if (x + playerRadius > b.position.x - 0.5 && x - playerRadius < b.position.x + 0.5 &&
             z + playerRadius > b.position.z - 0.5 && z - playerRadius < b.position.z + 0.5) {
-            // 檢查是否撞到方塊側面 (胸口高度判定)
             if (y - 0.8 < b.position.y + 0.5 && y + 0.1 > b.position.y - 0.5) return true;
         }
     }
@@ -97,14 +107,12 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
 
-        // 視角高度平滑切換
         const targetH = isCrouching ? 1.3 : 1.7;
         currentHeight += (targetH - currentHeight) * 0.15;
 
-        // 物理阻力
         velocity.x -= velocity.x * 10 * dt;
         velocity.z -= velocity.z * 10 * dt;
-        velocity.y -= 28 * dt; // 重力 $g = 28$
+        velocity.y -= 28 * dt;
 
         const forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
@@ -124,14 +132,11 @@ function animate() {
             velocity.z += moveDir.z * speed * dt;
         }
 
-        // 當前地面高度
         const currentGround = getGroundAt(camera.position.x, camera.position.z);
 
-        // 分軸移動與潛行鎖定
         const nextX = camera.position.x + velocity.x * dt;
         let canMoveX = !checkWall(nextX, camera.position.y, camera.position.z);
         if (isCrouching && canJump && canMoveX) {
-            // 關鍵：如果移動後的高度低於當前高度，強制鎖定
             if (getGroundAt(nextX, camera.position.z) < currentGround - 0.1) canMoveX = false;
         }
         if (canMoveX) camera.position.x = nextX;
@@ -143,7 +148,6 @@ function animate() {
         }
         if (canMoveZ) camera.position.z = nextZ;
 
-        // 垂直處理
         camera.position.y += velocity.y * dt;
         const finalGround = getGroundAt(camera.position.x, camera.position.z);
         
