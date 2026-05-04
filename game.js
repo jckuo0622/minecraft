@@ -60,7 +60,8 @@ const playerHeight = 1.7;
 document.addEventListener('keydown', (e) => {
     if(e.code==='KeyW') moveF=true; if(e.code==='KeyS') moveB=true;
     if(e.code==='KeyA') moveL=true; if(e.code==='KeyD') moveR=true;
-    if(e.code==='Space' && canJump) { velocity.y += 11; canJump = false; }
+    // 調成 7.5 大約是一格高
+    if(e.code==='Space' && canJump) { velocity.y += 7.5; canJump = false; }
 });
 document.addEventListener('keyup', (e) => {
     if(e.code==='KeyW') moveF=false; if(e.code==='KeyS') moveB=false;
@@ -89,9 +90,10 @@ window.addEventListener('mousedown', (e) => {
 function isColliding(x, y, z) {
     for (let block of blocks) {
         const b = block.position;
+        // 偵測玩家身體範圍內的碰撞
         if (x + playerRadius > b.x - 0.5 && x - playerRadius < b.x + 0.5 &&
             z + playerRadius > b.z - 0.5 && z - playerRadius < b.z + 0.5 &&
-            y - playerHeight + 0.2 < b.y + 0.5 && y > b.y - 0.5) {
+            y - playerHeight + 0.2 < b.y + 0.5 && y + 0.2 > b.y - 0.5) {
             return true;
         }
     }
@@ -108,7 +110,7 @@ function animate() {
 
         velocity.x -= velocity.x * 10 * dt;
         velocity.z -= velocity.z * 10 * dt;
-        velocity.y -= 28 * dt;
+        velocity.y -= 28 * dt; // 重力
 
         const forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
@@ -137,7 +139,14 @@ function animate() {
             camera.position.z = nextZ;
         } else { velocity.z = 0; }
 
+        // 垂直移動
         camera.position.y += velocity.y * dt;
+
+        // --- 新增：頭頂撞擊偵測 ---
+        // 檢查頭頂上方是否有方塊
+        if (velocity.y > 0 && isColliding(camera.position.x, camera.position.y + 0.1, camera.position.z)) {
+            velocity.y = 0; // 撞到頭，垂直速度歸零
+        }
 
         let groundY = -Infinity;
         for (let block of blocks) {
