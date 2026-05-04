@@ -51,21 +51,33 @@ for(let x=-10; x<10; x++) for(let z=-10; z<10; z++) {
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 camera.position.set(0, 2, 5);
 
-let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false;
+let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false, isCrouching = false;
 const velocity = new THREE.Vector3();
 const playerRadius = 0.3;
-const playerHeight = 1.7;
+let playerHeight = 1.7; // 基礎視線高度
 
 // --- D. 監聽控制 ---
 document.addEventListener('keydown', (e) => {
-    if(e.code==='KeyW') moveF=true; if(e.code==='KeyS') moveB=true;
-    if(e.code==='KeyA') moveL=true; if(e.code==='KeyD') moveR=true;
-    // 跳躍力度調成 8.5，確保能清爽地跳上一格
-    if(e.code==='Space' && canJump) { velocity.y += 8.5; canJump = false; }
+    switch (e.code) {
+        case 'KeyW': moveF = true; break;
+        case 'KeyS': moveB = true; break;
+        case 'KeyA': moveL = true; break;
+        case 'KeyD': moveR = true; break;
+        case 'Space': if (canJump) velocity.y += 8.5; canJump = false; break;
+        case 'ShiftLeft': 
+        case 'ShiftRight': isCrouching = true; break;
+    }
 });
+
 document.addEventListener('keyup', (e) => {
-    if(e.code==='KeyW') moveF=false; if(e.code==='KeyS') moveB=false;
-    if(e.code==='KeyA') moveL=false; if(e.code==='KeyD') moveR=false;
+    switch (e.code) {
+        case 'KeyW': moveF = false; break;
+        case 'KeyS': moveB = false; break;
+        case 'KeyA': moveL = false; break;
+        case 'KeyD': moveR = false; break;
+        case 'ShiftLeft': 
+        case 'ShiftRight': isCrouching = false; break;
+    }
 });
 
 const raycaster = new THREE.Raycaster();
@@ -86,23 +98,32 @@ window.addEventListener('mousedown', (e) => {
     }
 });
 
-// --- E. 物理碰撞判定 (修正核心) ---
+// --- E. 物理碰撞判定 ---
 function isColliding(x, y, z, checkType = 'body') {
     for (let block of blocks) {
         const b = block.position;
-        // 基本的 XZ 範圍判定
         const inX = x + playerRadius > b.x - 0.5 && x - playerRadius < b.x + 0.5;
         const inZ = z + playerRadius > b.z - 0.5 && z - playerRadius < b.z + 0.5;
         
         if (inX && inZ) {
             if (checkType === 'body') {
-                // 身體碰撞：只偵測腳底以上 0.4 到頭頂以下的範圍
-                // 這樣就不會偵測到你正在踩的那塊地（避免無法移動）
                 if (y - 1.3 < b.y + 0.5 && y + 0.1 > b.y - 0.5) return true;
             } else if (checkType === 'head') {
-                // 頭頂碰撞：偵測頭頂上方一點點的位置
                 if (y + 0.3 > b.y - 0.5 && y < b.y - 0.5) return true;
             }
+        }
+    }
+    return false;
+}
+
+// 輔助函式：檢查某個位置腳下是否有地面
+function hasGroundBelow(x, z, currentY) {
+    for (let block of blocks) {
+        const b = block.position;
+        if (x + playerRadius > b.x - 0.5 && x - playerRadius < b.x + 0.5 &&
+            z + playerRadius > b.z - 0.5 && z - playerRadius < b.z + 0.5) {
+            // 如果方塊表面剛好在腳下位置
+            if (Math.abs((currentY - playerHeight) - (b.y + 0.5)) < 0.2) return true;
         }
     }
     return false;
@@ -116,9 +137,18 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.1);
 
+        // 處理潛行時的高度與速度
+        let speedMultiplier = 60;
+        if (isCrouching && canJump) {
+            playerHeight = 1.4; // 蹲下時相機變低
+            speedMultiplier = 25; // 蹲下走得慢
+        } else {
+            playerHeight = 1.7;
+        }
+
         velocity.x -= velocity.x * 10 * dt;
         velocity.z -= velocity.z * 10 * dt;
-        velocity.y -= 28 * dt; // 重力
+        velocity.y -= 28 * dt;
 
         const forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
@@ -133,36 +163,43 @@ function animate() {
         
         if (moveDir.length() > 0) {
             moveDir.normalize();
-            velocity.x += moveDir.x * 60 * dt;
-            velocity.z += moveDir.z * 60 * dt;
+            velocity.x += moveDir.x * speedMultiplier * dt;
+            velocity.z += moveDir.z * speedMultiplier * dt;
         }
 
-        // 移動碰撞檢測：使用 'body' 類型避開地面
+        // --- 移動與邊緣保護邏輯 ---
         const nextX = camera.position.x + velocity.x * dt;
-        if (!isColliding(nextX, camera.position.y, camera.position.z, 'body')) {
-            camera.position.x = nextX;
-        } else { velocity.x = 0; }
-
         const nextZ = camera.position.z + velocity.z * dt;
-        if (!isColliding(camera.position.x, camera.position.y, nextZ, 'body')) {
-            camera.position.z = nextZ;
-        } else { velocity.z = 0; }
+
+        // X 軸移動判定
+        let canMoveX = !isColliding(nextX, camera.position.y, camera.position.z, 'body');
+        if (isCrouching && canJump && canMoveX) {
+            // 如果蹲下且在地面，檢查下一步腳下是否還有方塊
+            if (!hasGroundBelow(nextX, camera.position.z, camera.position.y)) canMoveX = false;
+        }
+        if (canMoveX) camera.position.x = nextX; else velocity.x = 0;
+
+        // Z 軸移動判定
+        let canMoveZ = !isColliding(camera.position.x, camera.position.y, nextZ, 'body');
+        if (isCrouching && canJump && canMoveZ) {
+            if (!hasGroundBelow(camera.position.x, nextZ, camera.position.y)) canMoveZ = false;
+        }
+        if (canMoveZ) camera.position.z = nextZ; else velocity.z = 0;
 
         // 垂直移動
         camera.position.y += velocity.y * dt;
 
-        // 頭頂撞擊偵測：使用 'head' 類型專門偵測天花板
+        // 頭頂撞擊
         if (velocity.y > 0 && isColliding(camera.position.x, camera.position.y, camera.position.z, 'head')) {
             velocity.y = 0; 
         }
 
-        // 地面判定邏輯
+        // 地面判定
         let groundY = -Infinity;
         for (let block of blocks) {
             const b = block.position;
             if (camera.position.x + playerRadius > b.x - 0.5 && camera.position.x - playerRadius < b.x + 0.5 &&
                 camera.position.z + playerRadius > b.z - 0.5 && camera.position.z - playerRadius < b.z + 0.5) {
-                // 只有在玩家腳底附近的方塊才算地面
                 if (b.y + 0.5 > groundY && b.y + 0.5 <= camera.position.y - playerHeight + 0.2) {
                     groundY = b.y + 0.5;
                 }
