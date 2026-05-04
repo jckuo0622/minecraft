@@ -53,7 +53,36 @@ document.addEventListener('keyup', (e) => {
     if (!e.shiftKey) isCrouching = false;
 });
 
-// --- E. 遊戲主迴圈 ---
+// --- E. 挖掘與建造 (這次補回來的重點) ---
+const raycaster = new THREE.Raycaster();
+window.addEventListener('mousedown', (e) => {
+    if (!controls.isLocked) return;
+
+    // 從畫面中心（準心位置）發射射線
+    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+    const intersects = raycaster.intersectObjects(blocks);
+
+    if (intersects.length > 0) {
+        const intersect = intersects[0];
+
+        if (e.button === 0) { // 左鍵：挖掉方塊
+            scene.remove(intersect.object);
+            blocks.splice(blocks.indexOf(intersect.object), 1);
+        } 
+        else if (e.button === 2) { // 右鍵：放置方塊
+            const newBlock = new THREE.Mesh(boxGeo, grassMaterials);
+            // 根據點擊到的面法線方向決定新方塊位置
+            newBlock.position.copy(intersect.object.position).add(intersect.face.normal);
+            scene.add(newBlock);
+            blocks.push(newBlock);
+        }
+    }
+});
+
+// 阻擋右鍵選單彈出
+window.addEventListener('contextmenu', e => e.preventDefault());
+
+// --- F. 遊戲主迴圈 ---
 let prevT = performance.now();
 function animate() {
     requestAnimationFrame(animate);
@@ -61,7 +90,6 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
 
-        // 平滑蹲下視角
         const targetH = isCrouching ? 1.3 : 1.7;
         currentHeight += (targetH - currentHeight) * 0.15;
 
@@ -89,7 +117,6 @@ function animate() {
 
         const currentGround = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius);
 
-        // 分軸移動檢查
         const nextX = camera.position.x + velocity.x * dt;
         let canMoveX = !checkWall(nextX, camera.position.y, camera.position.z, blocks, playerRadius);
         if (isCrouching && canJump && canMoveX) {
