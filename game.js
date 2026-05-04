@@ -60,8 +60,8 @@ const playerHeight = 1.7;
 document.addEventListener('keydown', (e) => {
     if(e.code==='KeyW') moveF=true; if(e.code==='KeyS') moveB=true;
     if(e.code==='KeyA') moveL=true; if(e.code==='KeyD') moveR=true;
-    // 調成 7.5 大約是一格高
-    if(e.code==='Space' && canJump) { velocity.y += 7.5; canJump = false; }
+    // 跳躍力度調成 8.5，確保能清爽地跳上一格
+    if(e.code==='Space' && canJump) { velocity.y += 8.5; canJump = false; }
 });
 document.addEventListener('keyup', (e) => {
     if(e.code==='KeyW') moveF=false; if(e.code==='KeyS') moveB=false;
@@ -86,15 +86,23 @@ window.addEventListener('mousedown', (e) => {
     }
 });
 
-// --- E. 物理碰撞判定 ---
-function isColliding(x, y, z) {
+// --- E. 物理碰撞判定 (修正核心) ---
+function isColliding(x, y, z, checkType = 'body') {
     for (let block of blocks) {
         const b = block.position;
-        // 偵測玩家身體範圍內的碰撞
-        if (x + playerRadius > b.x - 0.5 && x - playerRadius < b.x + 0.5 &&
-            z + playerRadius > b.z - 0.5 && z - playerRadius < b.z + 0.5 &&
-            y - playerHeight + 0.2 < b.y + 0.5 && y + 0.2 > b.y - 0.5) {
-            return true;
+        // 基本的 XZ 範圍判定
+        const inX = x + playerRadius > b.x - 0.5 && x - playerRadius < b.x + 0.5;
+        const inZ = z + playerRadius > b.z - 0.5 && z - playerRadius < b.z + 0.5;
+        
+        if (inX && inZ) {
+            if (checkType === 'body') {
+                // 身體碰撞：只偵測腳底以上 0.4 到頭頂以下的範圍
+                // 這樣就不會偵測到你正在踩的那塊地（避免無法移動）
+                if (y - 1.3 < b.y + 0.5 && y + 0.1 > b.y - 0.5) return true;
+            } else if (checkType === 'head') {
+                // 頭頂碰撞：偵測頭頂上方一點點的位置
+                if (y + 0.3 > b.y - 0.5 && y < b.y - 0.5) return true;
+            }
         }
     }
     return false;
@@ -129,30 +137,32 @@ function animate() {
             velocity.z += moveDir.z * 60 * dt;
         }
 
+        // 移動碰撞檢測：使用 'body' 類型避開地面
         const nextX = camera.position.x + velocity.x * dt;
-        if (!isColliding(nextX, camera.position.y, camera.position.z)) {
+        if (!isColliding(nextX, camera.position.y, camera.position.z, 'body')) {
             camera.position.x = nextX;
         } else { velocity.x = 0; }
 
         const nextZ = camera.position.z + velocity.z * dt;
-        if (!isColliding(camera.position.x, camera.position.y, nextZ)) {
+        if (!isColliding(camera.position.x, camera.position.y, nextZ, 'body')) {
             camera.position.z = nextZ;
         } else { velocity.z = 0; }
 
         // 垂直移動
         camera.position.y += velocity.y * dt;
 
-        // --- 新增：頭頂撞擊偵測 ---
-        // 檢查頭頂上方是否有方塊
-        if (velocity.y > 0 && isColliding(camera.position.x, camera.position.y + 0.1, camera.position.z)) {
-            velocity.y = 0; // 撞到頭，垂直速度歸零
+        // 頭頂撞擊偵測：使用 'head' 類型專門偵測天花板
+        if (velocity.y > 0 && isColliding(camera.position.x, camera.position.y, camera.position.z, 'head')) {
+            velocity.y = 0; 
         }
 
+        // 地面判定邏輯
         let groundY = -Infinity;
         for (let block of blocks) {
             const b = block.position;
             if (camera.position.x + playerRadius > b.x - 0.5 && camera.position.x - playerRadius < b.x + 0.5 &&
                 camera.position.z + playerRadius > b.z - 0.5 && camera.position.z - playerRadius < b.z + 0.5) {
+                // 只有在玩家腳底附近的方塊才算地面
                 if (b.y + 0.5 > groundY && b.y + 0.5 <= camera.position.y - playerHeight + 0.2) {
                     groundY = b.y + 0.5;
                 }
