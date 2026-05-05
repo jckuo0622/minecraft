@@ -96,6 +96,23 @@ document.addEventListener('keydown', (e) => {
     if (e.code === 'Digit3') { selectedIndex = 2; updateSelection(2); }
     if (e.code === 'Digit4') { selectedIndex = 3; updateSelection(3); } // 加入第 4 格
 });
+// --- 新增：滾輪控制物品欄 ---
+window.addEventListener('wheel', (e) => {
+    if (!controls.isLocked) return;
+
+    // deltaY > 0 代表向下滾，選下一個；deltaY < 0 代表向上滾，選上一個
+    if (e.deltaY > 0) {
+        selectedIndex++;
+    } else {
+        selectedIndex--;
+    }
+
+    // 循環邏輯：(當前索引 + 總格數) % 總格數
+    // 這樣可以確保 index 永遠在 0~3 之間循環，且支援負數往回跳
+    selectedIndex = (selectedIndex + 4) % 4;
+
+    updateSelection(selectedIndex);
+}, { passive: true });
 document.addEventListener('keyup', (e) => {
     if (e.code === 'KeyW') moveF = false; if (e.code === 'KeyS') moveB = false;
     if (e.code === 'KeyA') moveL = false; if (e.code === 'KeyD') moveR = false;
