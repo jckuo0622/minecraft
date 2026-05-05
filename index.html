@@ -3,36 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Web - 模組化版本</title>
-    <!-- 引入外部 CSS -->
+    <title>Three.js Minecraft Clone</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-    <!-- 遊戲中準心 -->
-    <div id="crosshair"></div>
-
-    <!-- 登錄介面 -->
+    <div id="game-container"></div>
+    <div id="crosshair">+</div>
+    
     <div id="overlay">
-        <div class="container">
-            <h1 class="game-title">MINECRAFT</h1>
-            <p>模組化開發版本：物理、視覺與邏輯分離</p>
-            <button class="play-button" id="btn-play">開始遊戲</button>
-            <div class="controls-card">
-                <ul>
-                    <li><b>W/A/S/D</b>：移動方向</li>
-                    <li><b>空白鍵</b>：跳躍</li>
-                    <li><b>左鍵 / 右鍵</b>：破壞與建造</li>
-                    <li><b>ESC</b>：暫停並回到選單</li>
-                </ul>
-            </div>
+        <div id="menu">
+            <h1>我的世界網頁版</h1>
+            <button id="btn-play">開始遊戲</button>
+            <p>控制：W A S D 移動 | Space 跳躍 | Shift 潛行<br>
+               1~3 切換方塊 | 左鍵挖掘 | 右鍵建造</p>
         </div>
     </div>
 
-    <!-- 3D 渲染容器 -->
-    <div id="game-container"></div>
-
-    <!-- 引入外部 JavaScript (注意 type="module") -->
     <script type="module" src="game.js"></script>
 </body>
 </html>

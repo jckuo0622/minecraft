@@ -13,24 +13,21 @@ export function createPixelTexture(c1, c2) {
     return tex;
 }
 
-// 根據類型獲取材質包
 export function getMaterials(type) {
-    let top, side, bottom;
-    
     if (type === 'stone') {
         const stone = createPixelTexture('#888888', '#777777');
         return new Array(6).fill(new THREE.MeshLambertMaterial({map: stone}));
     } 
     else if (type === 'wood') {
-        top = createPixelTexture('#6b4226', '#5d3a21'); // 年輪
-        side = createPixelTexture('#4d2d18', '#3e2413'); // 樹皮
+        const top = createPixelTexture('#6b4226', '#5d3a21');
+        const side = createPixelTexture('#4d2d18', '#3e2413');
         return [
             new THREE.MeshLambertMaterial({map: side}), new THREE.MeshLambertMaterial({map: side}),
             new THREE.MeshLambertMaterial({map: top}),  new THREE.MeshLambertMaterial({map: top}),
             new THREE.MeshLambertMaterial({map: side}), new THREE.MeshLambertMaterial({map: side})
         ];
     } 
-    else { // 預設草地
+    else { // grass
         const grassTop = createPixelTexture('#5dad44', '#77bc43');
         const dirtSide = createPixelTexture('#8b5a2b', '#7a4e25');
         return [

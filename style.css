@@ -1,54 +1,27 @@
-/* 物品欄容器 */
-#hotbar {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 5px;
-    background: rgba(0, 0, 0, 0.5);
-    padding: 5px;
-    border: 2px solid #555;
-    border-radius: 4px;
+body { margin: 0; overflow: hidden; background-color: #000; }
+
+#game-container { width: 100vw; height: 100vh; }
+
+#crosshair {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: white; font-size: 24px; font-weight: bold;
+    pointer-events: none; display: none;
+    text-shadow: 1px 1px 2px black;
 }
 
-/* 每個格子 */
-.slot {
-    width: 50px;
-    height: 50px;
-    background: rgba(128, 128, 128, 0.5);
-    border: 2px solid #333;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    position: relative;
+#overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); display: flex;
+    justify-content: center; align-items: center; z-index: 10;
 }
 
-/* 被選中的格子 */
-.slot.active {
-    border-color: white;
-    background: rgba(255, 255, 255, 0.2);
-    box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.5);
+#menu {
+    background: rgba(255,255,255,0.9); padding: 40px;
+    border-radius: 10px; text-align: center; font-family: sans-serif;
 }
 
-/* 格子裡的小方塊圖示 */
-.block-icon {
-    width: 30px;
-    height: 30px;
-    border: 1px solid rgba(0,0,0,0.2);
-}
-
-.icon-grass { background: #5dad44; border-top: 5px solid #77bc43; }
-.icon-stone { background: #888888; }
-.icon-wood  { background: #6b4226; outline: 2px solid #4d2d18; }
-
-/* 數字提示 */
-.slot::after {
-    content: attr(data-key);
-    position: absolute;
-    top: 2px;
-    left: 4px;
-    font-size: 10px;
-    color: #eee;
-    font-family: 'Arial', sans-serif;
+#btn-play {
+    padding: 15px 30px; font-size: 20px; cursor: pointer;
+    background: #5dad44; color: white; border: none; border-radius: 5px;
 }

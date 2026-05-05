@@ -3,7 +3,7 @@ import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examp
 import { getMaterials } from './textures.js';
 import { getGroundAt, checkWall } from './physics.js';
 
-// --- A. 初始化與氛圍 (保持不變) ---
+// --- A. 初始化 ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xbfd1e5);
 scene.fog = new THREE.FogExp2(0xbfd1e5, 0.05); 
@@ -15,53 +15,33 @@ const controls = new PointerLockControls(camera, document.body);
 const overlay = document.getElementById('overlay');
 const crosshair = document.getElementById('crosshair');
 
-// --- B. 新增：Minecraft 風格物品欄 (Hotbar) ---
+// --- B. 物品欄 UI ---
 const hotbar = document.createElement('div');
-hotbar.id = 'hotbar';
-hotbar.style.cssText = `
-    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-    display: flex; gap: 4px; background: rgba(0, 0, 0, 0.5); 
-    padding: 4px; border: 2px solid #333; display: none;
-`;
+hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:5px; background:rgba(0,0,0,0.6); padding:5px; border:2px solid #333; display:none; border-radius:5px;`;
 document.body.appendChild(hotbar);
-
 const slots = [];
 const blockTypes = ['grass', 'stone', 'wood'];
 const blockNames = ['草地', '石頭', '木頭'];
-
-// 建立 3 個格子 (你可以視需求增加到 9 個)
 for (let i = 0; i < 3; i++) {
     const slot = document.createElement('div');
-    slot.style.cssText = `
-        width: 50px; height: 50px; border: 2px solid #8b8b8b;
-        background-color: #555; display: flex; align-items: center;
-        justify-content: center; font-size: 10px; color: white;
-        position: relative;
-    `;
-    slot.innerHTML = `<span style="position:absolute; top:2px; left:4px;">${i+1}</span>
-                      <small>${blockNames[i]}</small>`;
+    slot.style.cssText = `width:50px; height:50px; border:2px solid #8b8b8b; background:#555; display:flex; align-items:center; justify-content:center; color:white; font-size:12px; position:relative;`;
+    slot.innerHTML = `<span style="position:absolute; top:2px; left:4px;">${i+1}</span>${blockNames[i]}`;
     hotbar.appendChild(slot);
     slots.push(slot);
 }
-
-// 更新選取框的函式
 function updateSelection(index) {
     slots.forEach((s, idx) => {
         s.style.border = (idx === index) ? '4px solid white' : '2px solid #8b8b8b';
         s.style.backgroundColor = (idx === index) ? '#777' : '#555';
     });
 }
-updateSelection(0); // 預設選第一個
+updateSelection(0);
 
 document.getElementById('btn-play').addEventListener('click', () => controls.lock());
-controls.addEventListener('lock', () => { 
-    overlay.style.display = 'none'; crosshair.style.display = 'block'; hotbar.style.display = 'flex'; 
-});
-controls.addEventListener('unlock', () => { 
-    overlay.style.display = 'flex'; crosshair.style.display = 'none'; hotbar.style.display = 'none'; 
-});
+controls.addEventListener('lock', () => { overlay.style.display = 'none'; crosshair.style.display = 'block'; hotbar.style.display = 'flex'; });
+controls.addEventListener('unlock', () => { overlay.style.display = 'flex'; crosshair.style.display = 'none'; hotbar.style.display = 'none'; });
 
-// --- C. 世界生成 (保持不變) ---
+// --- C. 地圖生成 ---
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const blocks = [];
 for (let x = -20; x < 20; x++) {
@@ -73,40 +53,41 @@ for (let x = -20; x < 20; x++) {
             scene.add(m);
             blocks.push(m);
         }
+        if (h >= 0 && Math.random() < 0.02) { // 隨機樹木
+            let treeH = 3 + Math.floor(Math.random() * 2);
+            for (let ty = 1; ty <= treeH; ty++) {
+                const w = new THREE.Mesh(boxGeo, getMaterials('wood'));
+                w.position.set(x, h + ty, z); scene.add(w); blocks.push(w);
+            }
+        }
     }
 }
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const sun = new THREE.DirectionalLight(0xffffff, 0.6);
-sun.position.set(10, 20, 10);
-scene.add(sun);
+const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(10, 20, 10); scene.add(sun);
 camera.position.set(0, 5, 10);
 
-// --- D. 狀態與輸入監聽 ---
+// --- D. 狀態與控制 ---
 let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false, isCrouching = false;
+let selectedIndex = 0;
 const velocity = new THREE.Vector3();
-const playerRadius = 0.3;
+const playerRadius = 0.35; // 加大判定半徑
 let currentHeight = 1.7;
-let selectedIndex = 0; // 當前選中的索引
 
 document.addEventListener('keydown', (e) => {
     if (e.code === 'KeyW') moveF = true; if (e.code === 'KeyS') moveB = true;
     if (e.code === 'KeyA') moveL = true; if (e.code === 'KeyD') moveR = true;
     if (e.code === 'Space' && canJump) { velocity.y += 8.5; canJump = false; }
     if (e.shiftKey) isCrouching = true;
-
-    // 數字鍵切換
     if (e.code === 'Digit1') { selectedIndex = 0; updateSelection(0); }
     if (e.code === 'Digit2') { selectedIndex = 1; updateSelection(1); }
     if (e.code === 'Digit3') { selectedIndex = 2; updateSelection(2); }
 });
-
 document.addEventListener('keyup', (e) => {
     if (e.code === 'KeyW') moveF = false; if (e.code === 'KeyS') moveB = false;
     if (e.code === 'KeyA') moveL = false; if (e.code === 'KeyD') moveR = false;
     if (!e.shiftKey) isCrouching = false;
 });
 
-// --- E. 挖掘與建造 ---
 const raycaster = new THREE.Raycaster();
 window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
@@ -115,73 +96,54 @@ window.addEventListener('mousedown', (e) => {
     if (intersects.length > 0) {
         const intersect = intersects[0];
         if (e.button === 0) { 
-            scene.remove(intersect.object);
-            blocks.splice(blocks.indexOf(intersect.object), 1);
+            scene.remove(intersect.object); blocks.splice(blocks.indexOf(intersect.object), 1);
         } else if (e.button === 2) {
-            const newBlock = new THREE.Mesh(boxGeo, getMaterials(blockTypes[selectedIndex]));
-            newBlock.position.copy(intersect.object.position).add(intersect.face.normal);
-            scene.add(newBlock);
-            blocks.push(newBlock);
+            const b = new THREE.Mesh(boxGeo, getMaterials(blockTypes[selectedIndex]));
+            b.position.copy(intersect.object.position).add(intersect.face.normal);
+            scene.add(b); blocks.push(b);
         }
     }
 });
 window.addEventListener('contextmenu', e => e.preventDefault());
 
-// --- F. 物理循環 (與之前相同) ---
+// --- E. 物理循環 ---
 let prevT = performance.now();
 function animate() {
     requestAnimationFrame(animate);
     if (controls.isLocked) {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
-        const oldX = camera.position.x;
-        const oldZ = camera.position.z;
-        const feetY = camera.position.y - currentHeight;
+        const oldX = camera.position.x; const oldZ = camera.position.z;
+        const targetH = isCrouching ? 1.2 : 1.7; currentHeight += (targetH - currentHeight) * 0.2;
 
-        const targetH = isCrouching ? 1.2 : 1.7;
-        currentHeight += (targetH - currentHeight) * 0.2;
-
-        velocity.x -= velocity.x * 10 * dt;
-        velocity.z -= velocity.z * 10 * dt;
-        velocity.y -= 28 * dt;
-
-        const forward = new THREE.Vector3();
-        camera.getWorldDirection(forward);
-        forward.y = 0; forward.normalize();
+        velocity.x -= velocity.x * 10 * dt; velocity.z -= velocity.z * 10 * dt; velocity.y -= 28 * dt;
+        const forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
         const right = new THREE.Vector3().crossVectors(camera.up, forward).normalize();
-
         const moveDir = new THREE.Vector3(0, 0, 0);
-        if (moveF) moveDir.add(forward);
-        if (moveB) moveDir.sub(forward);
-        if (moveL) moveDir.add(right);
-        if (moveR) moveDir.sub(right);
-
+        if (moveF) moveDir.add(forward); if (moveB) moveDir.sub(forward); if (moveL) moveDir.add(right); if (moveR) moveDir.sub(right);
         if (moveDir.length() > 0) {
             moveDir.normalize();
             let speed = (isCrouching && canJump) ? 22 : 60;
-            velocity.x += moveDir.x * speed * dt;
-            velocity.z += moveDir.z * speed * dt;
+            velocity.x += moveDir.x * speed * dt; velocity.z += moveDir.z * speed * dt;
         }
 
+        const feetY = camera.position.y - currentHeight;
         const currentGroundH = getGroundAt(oldX, oldZ, blocks, playerRadius, feetY);
+
+        // 分軸移動檢查
         const nextX = oldX + velocity.x * dt;
         let canMoveX = !checkWall(nextX, camera.position.y, oldZ, blocks, playerRadius);
-        if (isCrouching && canJump && canMoveX) {
-            if (getGroundAt(nextX, oldZ, blocks, playerRadius, feetY) < currentGroundH - 0.1) canMoveX = false;
-        }
+        if (isCrouching && canJump && canMoveX && getGroundAt(nextX, oldZ, blocks, playerRadius, feetY) < currentGroundH - 0.1) canMoveX = false;
         if (canMoveX) camera.position.x = nextX;
 
         const nextZ = oldZ + velocity.z * dt;
         let canMoveZ = !checkWall(camera.position.x, camera.position.y, nextZ, blocks, playerRadius);
-        if (isCrouching && canJump && canMoveZ) {
-            if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius, feetY) < currentGroundH - 0.1) canMoveZ = false;
-        }
+        if (isCrouching && canJump && canMoveZ && getGroundAt(camera.position.x, nextZ, blocks, playerRadius, feetY) < currentGroundH - 0.1) canMoveZ = false;
         if (canMoveZ) camera.position.z = nextZ;
 
-        if (!isCrouching && canJump) {
-            if (getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, feetY) === -Infinity) {
-                camera.position.x = oldX; camera.position.z = oldZ;
-            }
+        // 潛行站立回彈
+        if (!isCrouching && canJump && getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, feetY) === -Infinity) {
+            camera.position.x = oldX; camera.position.z = oldZ;
         }
 
         camera.position.y += velocity.y * dt;
@@ -189,11 +151,7 @@ function animate() {
 
         const finalGround = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, camera.position.y - currentHeight);
         if (camera.position.y - currentHeight <= finalGround) {
-            if (velocity.y < 0) {
-                velocity.y = 0;
-                camera.position.y = finalGround + currentHeight;
-                canJump = true;
-            }
+            if (velocity.y < 0) { velocity.y = 0; camera.position.y = finalGround + currentHeight; canJump = true; }
         } else { canJump = false; }
         prevT = t;
     }
@@ -202,7 +160,5 @@ function animate() {
 animate();
 
 window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
 });
