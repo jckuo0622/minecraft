@@ -16,7 +16,7 @@ const controls = new PointerLockControls(camera, document.body);
 const overlay = document.getElementById('overlay');
 const crosshair = document.getElementById('crosshair');
 
-// --- B. 區塊與填充系統 ---
+// --- B. 區塊系統 ---
 const CHUNK_SIZE = 16;
 const RENDER_DISTANCE = 2;
 const loadedChunks = new Map();
@@ -25,6 +25,26 @@ const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 
 function getNoiseHeight(x, z) {
     return Math.round(Math.sin(x * 0.1) * Math.cos(z * 0.1) * 2 + Math.sin(x * 0.05) * 2);
+}
+
+// 修正：當挖掉方塊時，自動檢查下方並補滿石頭
+function fillGap(x, y, z) {
+    // 檢查目標位置下方是否已經有方塊
+    const hasBlockBelow = blocks.some(b => 
+        Math.abs(b.position.x - x) < 0.1 && 
+        Math.abs(b.position.y - (y - 1)) < 0.1 && 
+        Math.abs(b.position.z - z) < 0.1
+    );
+
+    if (!hasBlockBelow && y > -10) { // 限制挖掘深度到 -10
+        const m = new THREE.Mesh(boxGeo, getMaterials('stone'));
+        m.position.set(x, y - 1, z);
+        scene.add(m);
+        blocks.push(m);
+        // 遞迴調用，確保挖更深時也會繼續補
+        return m; 
+    }
+    return null;
 }
 
 function spawnChunk(cx, cz) {
@@ -38,12 +58,10 @@ function spawnChunk(cx, cz) {
             const wz = cz * CHUNK_SIZE + z;
             const h = getNoiseHeight(wx, wz);
 
-            // 模仿麥塊填充：表面草地 + 地下兩層石頭
-            for (let dy = 0; dy < 3; dy++) {
-                const type = (dy === 0) ? 'grass' : 'stone';
-                const m = new THREE.Mesh(boxGeo, getMaterials(type));
+            // 初始生成兩層（草地+石頭）
+            for (let dy = 0; dy < 2; dy++) {
+                const m = new THREE.Mesh(boxGeo, getMaterials(dy === 0 ? 'grass' : 'stone'));
                 m.position.set(wx, h - dy, wz);
-                
                 scene.add(m);
                 blocks.push(m);
                 chunkBlocks.push(m);
@@ -60,9 +78,7 @@ function updateWorld() {
     for (let x = -RENDER_DISTANCE; x <= RENDER_DISTANCE; x++) {
         for (let z = -RENDER_DISTANCE; z <= RENDER_DISTANCE; z++) {
             const key = `${px + x},${pz + z}`;
-            if (!loadedChunks.has(key) && !generationQueue.includes(key)) {
-                generationQueue.push(key);
-            }
+            if (!loadedChunks.has(key) && !generationQueue.includes(key)) generationQueue.push(key);
         }
     }
     for (let [key, chunkBlocks] of loadedChunks) {
@@ -79,14 +95,13 @@ function updateWorld() {
 }
 
 function processQueue() {
-    // 這裡每幀處理 1 個區塊任務 (因為填充三層，計算量變 3 倍，所以放慢一點點)
     if (generationQueue.length > 0) {
         const next = generationQueue.shift().split(',').map(Number);
         spawnChunk(next[0], next[1]);
     }
 }
 
-// --- C. UI & 控制 ---
+// --- C. UI 與 互動 ---
 const hotbar = document.createElement('div');
 hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:5px; background:rgba(0,0,0,0.6); padding:5px; border:2px solid #333; display:none;`;
 document.body.appendChild(hotbar);
@@ -140,9 +155,13 @@ window.addEventListener('mousedown', (e) => {
     if (intersects.length > 0) {
         const intersect = intersects[0];
         if (e.button === 0) {
+            const targetPos = intersect.object.position.clone();
             scene.remove(intersect.object);
             const idx = blocks.indexOf(intersect.object);
             if (idx > -1) blocks.splice(idx, 1);
+            
+            // 實時更新核心：補上被挖掉方塊下方的空缺
+            fillGap(targetPos.x, targetPos.y, targetPos.z);
         } else if (e.button === 2) {
             const b = new THREE.Mesh(boxGeo, getMaterials(blockTypes[selectedIdx]));
             b.position.copy(intersect.object.position).add(intersect.face.normal);
