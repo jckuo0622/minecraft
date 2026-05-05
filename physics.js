@@ -1,15 +1,15 @@
 export function getGroundAt(x, z, blocks, playerRadius, feetY) {
-    let maxH = -Infinity; 
-
+    let maxH = -Infinity;
     for (let b of blocks) {
         const bPos = b.position;
-        // 檢查 XZ 平面是否重疊
-        if (x + playerRadius > bPos.x - 0.5 && x - playerRadius < bPos.x + 0.5 &&
-            z + playerRadius > bPos.z - 0.5 && z - playerRadius < bPos.z + 0.5) {
-            
+        // 檢查玩家足跡範圍 [x-r, x+r] 是否與方塊範圍 [bx-0.5, bx+0.5] 有交集
+        const intersectX = (x + playerRadius > bPos.x - 0.5) && (x - playerRadius < bPos.x + 0.5);
+        const intersectZ = (z + playerRadius > bPos.z - 0.5) && (z - playerRadius < bPos.z + 0.5);
+
+        if (intersectX && intersectZ) {
             const blockTop = bPos.y + 0.5;
-            // 關鍵：只找「在腳底之下」或「腳底附近」的方塊頂面
-            if (blockTop <= feetY + 0.1) {
+            // 偵測腳底位置以下的最近方塊
+            if (blockTop <= feetY + 0.2) {
                 if (blockTop > maxH) maxH = blockTop;
             }
         }
@@ -22,7 +22,7 @@ export function checkWall(x, y, z, blocks, playerRadius) {
         const bPos = b.position;
         if (x + playerRadius > bPos.x - 0.5 && x - playerRadius < bPos.x + 0.5 &&
             z + playerRadius > bPos.z - 0.5 && z - playerRadius < bPos.z + 0.5) {
-            // 判定身體碰撞 (避開腳底 0.1 單位)
+            // 判定身體碰撞
             if (y - 0.8 < bPos.y + 0.5 && y + 0.1 > bPos.y - 0.5) return true;
         }
     }

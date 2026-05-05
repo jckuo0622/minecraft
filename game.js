@@ -30,13 +30,14 @@ for (let x = -10; x < 10; x++) {
     }
 }
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-camera.position.set(0, 5, 5); // 初始生成稍微高一點
+camera.position.set(0, 5, 5);
 
 let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false, isCrouching = false;
 const velocity = new THREE.Vector3();
 const playerRadius = 0.3;
 let currentHeight = 1.7;
 
+// 修正 Shift 監聽：直接監聽 keydown 事件的 shiftKey 屬性
 document.addEventListener('keydown', (e) => {
     if (e.code === 'KeyW') moveF = true; if (e.code === 'KeyS') moveB = true;
     if (e.code === 'KeyA') moveL = true; if (e.code === 'KeyD') moveR = true;
@@ -76,13 +77,9 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
 
-        const oldX = camera.position.x;
-        const oldZ = camera.position.z;
-        const feetY = camera.position.y - currentHeight;
-
-        // 視角高度
-        const targetH = isCrouching ? 1.3 : 1.7;
-        currentHeight += (targetH - currentHeight) * 0.15;
+        // 1. 視角高度強行平滑同步
+        const targetH = isCrouching ? 1.2 : 1.7; // 蹲下更有感
+        currentHeight += (targetH - currentHeight) * 0.2;
 
         velocity.x -= velocity.x * 10 * dt;
         velocity.z -= velocity.z * 10 * dt;
@@ -101,29 +98,35 @@ function animate() {
 
         if (moveDir.length() > 0) {
             moveDir.normalize();
-            let speed = (isCrouching && canJump) ? 20 : 60;
+            let speed = (isCrouching && canJump) ? 22 : 60;
             velocity.x += moveDir.x * speed * dt;
             velocity.z += moveDir.z * speed * dt;
         }
 
-        const groundH = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, feetY);
+        const oldX = camera.position.x;
+        const oldZ = camera.position.z;
+        const feetY = camera.position.y - currentHeight;
 
-        // 分軸移動檢查
-        const nextX = camera.position.x + velocity.x * dt;
-        let canMoveX = !checkWall(nextX, camera.position.y, camera.position.z, blocks, playerRadius);
+        // 2. 取得移動前的支撐狀態
+        const preGroundH = getGroundAt(oldX, oldZ, blocks, playerRadius, feetY);
+
+        // 3. 分軸移動與「全足跡」檢查
+        const nextX = oldX + velocity.x * dt;
+        let canMoveX = !checkWall(nextX, camera.position.y, oldZ, blocks, playerRadius);
         if (isCrouching && canJump && canMoveX) {
-            if (getGroundAt(nextX, camera.position.z, blocks, playerRadius, feetY) === -Infinity) canMoveX = false;
+            // 如果 X 移動後，整個足跡範圍內都找不到任何地面，則封鎖 X 移動
+            if (getGroundAt(nextX, oldZ, blocks, playerRadius, feetY) === -Infinity) canMoveX = false;
         }
         if (canMoveX) camera.position.x = nextX;
 
-        const nextZ = camera.position.z + velocity.z * dt;
+        const nextZ = oldZ + velocity.z * dt;
         let canMoveZ = !checkWall(camera.position.x, camera.position.y, nextZ, blocks, playerRadius);
         if (isCrouching && canJump && canMoveZ) {
             if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius, feetY) === -Infinity) canMoveZ = false;
         }
         if (canMoveZ) camera.position.z = nextZ;
 
-        // 潛行站立檢查
+        // 4. 潛行站立安全回彈
         if (!isCrouching && canJump) {
             if (getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, feetY) === -Infinity) {
                 camera.position.x = oldX;
@@ -131,11 +134,10 @@ function animate() {
             }
         }
 
-        // 垂直位移
+        // 5. 垂直位移
         camera.position.y += velocity.y * dt;
         const finalGround = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, camera.position.y - currentHeight);
 
-        // 真實落地判定 (完全移除 1.7 的保底高度)
         if (camera.position.y - currentHeight <= finalGround) {
             if (velocity.y < 0) {
                 velocity.y = 0;
@@ -146,10 +148,10 @@ function animate() {
             canJump = false;
         }
 
-        // --- 重生機制 (Respawn) ---
-        if (camera.position.y < -30) {
-            camera.position.set(0, 5, 0); // 回到起點上方
-            velocity.set(0, 0, 0);       // 動量歸零
+        // 6. 重生判定 (掉到 -20 就傳送回來)
+        if (camera.position.y < -20) {
+            camera.position.set(0, 5, 0);
+            velocity.set(0, 0, 0);
         }
         
         prevT = t;
