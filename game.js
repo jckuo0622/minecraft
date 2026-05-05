@@ -15,61 +15,61 @@ const controls = new PointerLockControls(camera, document.body);
 const overlay = document.getElementById('overlay');
 const crosshair = document.getElementById('crosshair');
 
-// --- B. 無限地圖配置 ---
-const CHUNK_SIZE = 8;        // 每個區塊的大小
-const RENDER_DISTANCE = 3;   // 讀取距離 (玩家周圍 3 圈區塊)
-const loadedChunks = new Map(); // 儲存已生成的區塊
+// --- B. 無限地圖與分時載入配置 ---
+const CHUNK_SIZE = 8;
+const RENDER_DISTANCE = 3;
+const loadedChunks = new Map(); 
+const generationQueue = []; // 待處理的區塊隊列
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-const blocks = []; // 全域方塊陣列，供物理引擎使用
+const blocks = [];
 
-// 地形高度公式：輸入座標，輸出唯一確定的高度
 function getNoiseHeight(x, z) {
-    return Math.round(
-        Math.sin(x * 0.15) * Math.cos(z * 0.15) * 1.5 + 
-        Math.sin(x * 0.05) * 1.5
-    );
+    return Math.round(Math.sin(x * 0.15) * Math.cos(z * 0.15) * 1.5 + Math.sin(x * 0.05) * 1.5);
 }
 
-// 更新世界區塊
-function updateWorld() {
+// 實際生成區塊的函式
+function spawnChunk(cx, cz) {
+    const key = `${cx},${cz}`;
+    if (loadedChunks.has(key)) return;
+
+    const chunkBlocks = [];
+    for (let bx = 0; bx < CHUNK_SIZE; bx++) {
+        for (let bz = 0; bz < CHUNK_SIZE; bz++) {
+            const wx = cx * CHUNK_SIZE + bx;
+            const wz = cz * CHUNK_SIZE + bz;
+            const h = getNoiseHeight(wx, wz);
+            for (let y = -2; y <= h; y++) {
+                const m = new THREE.Mesh(boxGeo, getMaterials(y === h ? 'grass' : 'stone'));
+                m.position.set(wx, y, wz);
+                scene.add(m);
+                blocks.push(m);
+                chunkBlocks.push(m);
+            }
+        }
+    }
+    loadedChunks.set(key, chunkBlocks);
+}
+
+// 負責排隊，不直接計算
+function updateWorldQueue() {
     const playerChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
     const playerChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
 
-    // 1. 生成新區塊
     for (let x = -RENDER_DISTANCE; x <= RENDER_DISTANCE; x++) {
         for (let z = -RENDER_DISTANCE; z <= RENDER_DISTANCE; z++) {
             const cx = playerChunkX + x;
             const cz = playerChunkZ + z;
             const key = `${cx},${cz}`;
-
-            if (!loadedChunks.has(key)) {
-                const chunkBlocks = [];
-                for (let bx = 0; bx < CHUNK_SIZE; bx++) {
-                    for (let bz = 0; bz < CHUNK_SIZE; bz++) {
-                        const wx = cx * CHUNK_SIZE + bx;
-                        const wz = cz * CHUNK_SIZE + bz;
-                        const h = getNoiseHeight(wx, wz);
-                        
-                        for (let y = -2; y <= h; y++) {
-                            const m = new THREE.Mesh(boxGeo, getMaterials(y === h ? 'grass' : 'stone'));
-                            m.position.set(wx, y, wz);
-                            scene.add(m);
-                            blocks.push(m);
-                            chunkBlocks.push(m);
-                        }
-                    }
-                }
-                loadedChunks.set(key, chunkBlocks);
+            if (!loadedChunks.has(key) && !generationQueue.includes(key)) {
+                generationQueue.push(key);
             }
         }
     }
 
-    // 2. 卸載遠方區塊 (優化記憶體)
+    // 卸載邏輯 (直接執行，因為 remove 負擔較小)
     for (let [key, chunkBlocks] of loadedChunks) {
         const [cx, cz] = key.split(',').map(Number);
-        if (Math.abs(cx - playerChunkX) > RENDER_DISTANCE + 1 || 
-            Math.abs(cz - playerChunkZ) > RENDER_DISTANCE + 1) {
-            
+        if (Math.abs(cx - playerChunkX) > RENDER_DISTANCE + 1 || Math.abs(cz - playerChunkZ) > RENDER_DISTANCE + 1) {
             chunkBlocks.forEach(b => {
                 scene.remove(b);
                 const idx = blocks.indexOf(b);
@@ -80,7 +80,16 @@ function updateWorld() {
     }
 }
 
-// --- C. UI 物品欄 (4格) ---
+// 每幀只處理隊列中的一個任務
+function processQueue() {
+    if (generationQueue.length > 0) {
+        const nextKey = generationQueue.shift();
+        const [cx, cz] = nextKey.split(',').map(Number);
+        spawnChunk(cx, cz);
+    }
+}
+
+// --- C. UI 物品欄 ---
 const hotbar = document.createElement('div');
 hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:5px; background:rgba(0,0,0,0.6); padding:5px; border:2px solid #333; display:none; border-radius:5px;`;
 document.body.appendChild(hotbar);
@@ -108,9 +117,9 @@ controls.addEventListener('unlock', () => { overlay.style.display = 'flex'; cros
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(10, 20, 10); scene.add(sun);
-camera.position.set(0, 5, 0); // 從原點上方出生
+camera.position.set(0, 5, 0);
 
-// --- D. 狀態與控制 ---
+// --- D. 控制與輸入 ---
 let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false, isCrouching = false;
 let selectedIndex = 0;
 const velocity = new THREE.Vector3();
@@ -133,7 +142,6 @@ document.addEventListener('keyup', (e) => {
     if (!e.shiftKey) isCrouching = false;
 });
 
-// 滾輪切換
 window.addEventListener('wheel', (e) => {
     if (!controls.isLocked) return;
     if (e.deltaY > 0) selectedIndex++; else selectedIndex--;
@@ -164,7 +172,8 @@ let prevT = performance.now();
 function animate() {
     requestAnimationFrame(animate);
     if (controls.isLocked) {
-        updateWorld(); // <-- 關鍵：動態加載地圖
+        updateWorldQueue(); // 加入排隊
+        processQueue();    // 每幀處理一個任務
 
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
