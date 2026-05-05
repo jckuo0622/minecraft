@@ -16,7 +16,7 @@ const controls = new PointerLockControls(camera, document.body);
 const overlay = document.getElementById('overlay');
 const crosshair = document.getElementById('crosshair');
 
-// --- B. 區塊系統 ---
+// --- B. 區塊與動態填充 ---
 const CHUNK_SIZE = 16;
 const RENDER_DISTANCE = 2;
 const loadedChunks = new Map();
@@ -27,45 +27,54 @@ function getNoiseHeight(x, z) {
     return Math.round(Math.sin(x * 0.1) * Math.cos(z * 0.1) * 2 + Math.sin(x * 0.05) * 2);
 }
 
-// 修正：當挖掉方塊時，自動檢查下方並補滿石頭
-function fillGap(x, y, z) {
-    // 檢查目標位置下方是否已經有方塊
-    const hasBlockBelow = blocks.some(b => 
-        Math.abs(b.position.x - x) < 0.1 && 
-        Math.abs(b.position.y - (y - 1)) < 0.1 && 
-        Math.abs(b.position.z - z) < 0.1
-    );
+// 核心：全方位更新鄰居
+function updateNeighbors(x, y, z) {
+    // 定義 6 個檢查方向：前後左右上下
+    const directions = [
+        [1, 0, 0], [-1, 0, 0],
+        [0, 1, 0], [0, -1, 0],
+        [0, 0, 1], [0, 0, -1]
+    ];
 
-    if (!hasBlockBelow && y > -10) { // 限制挖掘深度到 -10
-        const m = new THREE.Mesh(boxGeo, getMaterials('stone'));
-        m.position.set(x, y - 1, z);
-        scene.add(m);
-        blocks.push(m);
-        // 遞迴調用，確保挖更深時也會繼續補
-        return m; 
-    }
-    return null;
+    directions.forEach(([dx, dy, dz]) => {
+        const nx = x + dx;
+        const ny = y + dy;
+        const nz = z + dz;
+
+        // 限制不要往天上長石頭，也不要超過地底極限
+        if (ny > getNoiseHeight(nx, nz) || ny < -15) return;
+
+        // 檢查該位置是否已有方塊
+        const exists = blocks.some(b => 
+            Math.abs(b.position.x - nx) < 0.1 && 
+            Math.abs(b.position.y - ny) < 0.1 && 
+            Math.abs(b.position.z - nz) < 0.1
+        );
+
+        if (!exists) {
+            const m = new THREE.Mesh(boxGeo, getMaterials('stone'));
+            m.position.set(nx, ny, nz);
+            scene.add(m);
+            blocks.push(m);
+        }
+    });
 }
 
 function spawnChunk(cx, cz) {
     const key = `${cx},${cz}`;
     if (loadedChunks.has(key)) return;
-    
     const chunkBlocks = [];
     for (let x = 0; x < CHUNK_SIZE; x++) {
         for (let z = 0; z < CHUNK_SIZE; z++) {
             const wx = cx * CHUNK_SIZE + x;
             const wz = cz * CHUNK_SIZE + z;
             const h = getNoiseHeight(wx, wz);
-
-            // 初始生成兩層（草地+石頭）
-            for (let dy = 0; dy < 2; dy++) {
-                const m = new THREE.Mesh(boxGeo, getMaterials(dy === 0 ? 'grass' : 'stone'));
-                m.position.set(wx, h - dy, wz);
-                scene.add(m);
-                blocks.push(m);
-                chunkBlocks.push(m);
-            }
+            // 初始只生成地表
+            const m = new THREE.Mesh(boxGeo, getMaterials('grass'));
+            m.position.set(wx, h, wz);
+            scene.add(m);
+            blocks.push(m);
+            chunkBlocks.push(m);
         }
     }
     loadedChunks.set(key, chunkBlocks);
@@ -101,7 +110,7 @@ function processQueue() {
     }
 }
 
-// --- C. UI 與 互動 ---
+// --- C. UI 物品欄 (維持 4 格) ---
 const hotbar = document.createElement('div');
 hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:5px; background:rgba(0,0,0,0.6); padding:5px; border:2px solid #333; display:none;`;
 document.body.appendChild(hotbar);
@@ -154,15 +163,15 @@ window.addEventListener('mousedown', (e) => {
     const intersects = raycaster.intersectObjects(blocks);
     if (intersects.length > 0) {
         const intersect = intersects[0];
-        if (e.button === 0) {
-            const targetPos = intersect.object.position.clone();
+        if (e.button === 0) { // 左鍵挖掘
+            const pos = intersect.object.position.clone();
             scene.remove(intersect.object);
             const idx = blocks.indexOf(intersect.object);
             if (idx > -1) blocks.splice(idx, 1);
             
-            // 實時更新核心：補上被挖掉方塊下方的空缺
-            fillGap(targetPos.x, targetPos.y, targetPos.z);
-        } else if (e.button === 2) {
+            // 全方位補洞
+            updateNeighbors(pos.x, pos.y, pos.z);
+        } else if (e.button === 2) { // 右鍵建造
             const b = new THREE.Mesh(boxGeo, getMaterials(blockTypes[selectedIdx]));
             b.position.copy(intersect.object.position).add(intersect.face.normal);
             scene.add(b); blocks.push(b);
@@ -177,7 +186,7 @@ sun.position.set(10, 20, 10);
 scene.add(sun);
 camera.position.set(0, 10, 0);
 
-// --- E. 物理循環 ---
+// --- E. 物理與循環 ---
 let prevT = performance.now();
 function animate() {
     requestAnimationFrame(animate);
