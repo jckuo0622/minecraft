@@ -16,11 +16,11 @@ const controls = new PointerLockControls(camera, document.body);
 const overlay = document.getElementById('overlay');
 const crosshair = document.getElementById('crosshair');
 
-// --- B. 區塊系統 ---
+// --- B. 區塊與填充系統 ---
 const CHUNK_SIZE = 16;
 const RENDER_DISTANCE = 2;
 const loadedChunks = new Map();
-const blocks = []; // 核心：這裡必須確實存放所有的 Mesh 物件
+const blocks = []; 
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 
 function getNoiseHeight(x, z) {
@@ -37,12 +37,17 @@ function spawnChunk(cx, cz) {
             const wx = cx * CHUNK_SIZE + x;
             const wz = cz * CHUNK_SIZE + z;
             const h = getNoiseHeight(wx, wz);
-            const m = new THREE.Mesh(boxGeo, getMaterials('grass'));
-            m.position.set(wx, h, wz);
-            
-            scene.add(m); // 修正：直接加入 scene 而非 Group，確保 Raycaster 好抓取
-            blocks.push(m);
-            chunkBlocks.push(m);
+
+            // 模仿麥塊填充：表面草地 + 地下兩層石頭
+            for (let dy = 0; dy < 3; dy++) {
+                const type = (dy === 0) ? 'grass' : 'stone';
+                const m = new THREE.Mesh(boxGeo, getMaterials(type));
+                m.position.set(wx, h - dy, wz);
+                
+                scene.add(m);
+                blocks.push(m);
+                chunkBlocks.push(m);
+            }
         }
     }
     loadedChunks.set(key, chunkBlocks);
@@ -60,7 +65,6 @@ function updateWorld() {
             }
         }
     }
-    // 卸載遠處區塊
     for (let [key, chunkBlocks] of loadedChunks) {
         const [cx, cz] = key.split(',').map(Number);
         if (Math.abs(cx - px) > RENDER_DISTANCE + 1 || Math.abs(cz - pz) > RENDER_DISTANCE + 1) {
@@ -75,15 +79,14 @@ function updateWorld() {
 }
 
 function processQueue() {
-    for(let i=0; i<2; i++) {
-        if (generationQueue.length > 0) {
-            const next = generationQueue.shift().split(',').map(Number);
-            spawnChunk(next[0], next[1]);
-        }
+    // 這裡每幀處理 1 個區塊任務 (因為填充三層，計算量變 3 倍，所以放慢一點點)
+    if (generationQueue.length > 0) {
+        const next = generationQueue.shift().split(',').map(Number);
+        spawnChunk(next[0], next[1]);
     }
 }
 
-// --- C. UI 物品欄 ---
+// --- C. UI & 控制 ---
 const hotbar = document.createElement('div');
 hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:5px; background:rgba(0,0,0,0.6); padding:5px; border:2px solid #333; display:none;`;
 document.body.appendChild(hotbar);
@@ -103,7 +106,6 @@ document.getElementById('btn-play').addEventListener('click', () => controls.loc
 controls.addEventListener('lock', () => { overlay.style.display = 'none'; crosshair.style.display = 'block'; hotbar.style.display = 'flex'; });
 controls.addEventListener('unlock', () => { overlay.style.display = 'flex'; crosshair.style.display = 'none'; hotbar.style.display = 'none'; });
 
-// --- D. 互動與控制 ---
 let selectedIdx = 0;
 const velocity = new THREE.Vector3();
 const playerRadius = 0.35;
@@ -130,26 +132,21 @@ window.addEventListener('wheel', (e) => {
     updateSelection(selectedIdx);
 }, { passive: true });
 
-// 核心修正：滑鼠事件
 window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-    
-    // 偵測 blocks 陣列中的所有物件
     const intersects = raycaster.intersectObjects(blocks);
-    
     if (intersects.length > 0) {
         const intersect = intersects[0];
-        if (e.button === 0) { // 左鍵挖掘
+        if (e.button === 0) {
             scene.remove(intersect.object);
             const idx = blocks.indexOf(intersect.object);
             if (idx > -1) blocks.splice(idx, 1);
-        } else if (e.button === 2) { // 右鍵建造
+        } else if (e.button === 2) {
             const b = new THREE.Mesh(boxGeo, getMaterials(blockTypes[selectedIdx]));
             b.position.copy(intersect.object.position).add(intersect.face.normal);
-            scene.add(b);
-            blocks.push(b);
+            scene.add(b); blocks.push(b);
         }
     }
 });
@@ -174,18 +171,14 @@ function animate() {
 
         const targetH = isCrouching ? 1.2 : 1.7;
         currentHeight += (targetH - currentHeight) * 0.2;
-
         velocity.x -= velocity.x * 10 * dt;
         velocity.z -= velocity.z * 10 * dt;
         
         const feetY = camera.position.y - currentHeight;
         const groundH = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, feetY);
 
-        if (groundH === -999) {
-            velocity.y = 0;
-        } else {
-            velocity.y -= 28 * dt;
-        }
+        if (groundH === -999) { velocity.y = 0; }
+        else { velocity.y -= 28 * dt; }
 
         const forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
@@ -205,24 +198,16 @@ function animate() {
 
         const nextX = camera.position.x + velocity.x * dt;
         if (!checkWall(nextX, camera.position.y, camera.position.z, blocks, playerRadius)) {
-            if (getGroundAt(nextX, camera.position.z, blocks, playerRadius, feetY) !== -999) {
-                camera.position.x = nextX;
-            }
+            if (getGroundAt(nextX, camera.position.z, blocks, playerRadius, feetY) !== -999) camera.position.x = nextX;
         }
         const nextZ = camera.position.z + velocity.z * dt;
         if (!checkWall(camera.position.x, camera.position.y, nextZ, blocks, playerRadius)) {
-            if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius, feetY) !== -999) {
-                camera.position.z = nextZ;
-            }
+            if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius, feetY) !== -999) camera.position.z = nextZ;
         }
         camera.position.y += velocity.y * dt;
         if (groundH !== -999 && camera.position.y - currentHeight <= groundH) {
-            velocity.y = 0;
-            camera.position.y = groundH + currentHeight;
-            canJump = true;
-        } else if (groundH !== -999) {
-            canJump = false;
-        }
+            velocity.y = 0; camera.position.y = groundH + currentHeight; canJump = true;
+        } else if (groundH !== -999) { canJump = false; }
         if (camera.position.y < -30) camera.position.set(0, 20, 0);
     }
     renderer.render(scene, camera);
@@ -230,7 +215,5 @@ function animate() {
 animate();
 
 window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
 });
