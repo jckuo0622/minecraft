@@ -27,6 +27,11 @@ export function getMaterials(type) {
             new THREE.MeshLambertMaterial({map: side}), new THREE.MeshLambertMaterial({map: side})
         ];
     } 
+    else if (type === 'leaf') {
+        // 新增：深淺交替的葉子綠色
+        const leaf = createPixelTexture('#2d5a27', '#3d7a33');
+        return new Array(6).fill(new THREE.MeshLambertMaterial({map: leaf, transparent: true, opacity: 0.9}));
+    }
     else { // grass
         const grassTop = createPixelTexture('#5dad44', '#77bc43');
         const dirtSide = createPixelTexture('#8b5a2b', '#7a4e25');
