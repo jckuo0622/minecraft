@@ -6,7 +6,7 @@ import { getGroundAt, checkWall } from './physics.js';
 // --- A. 初始化 ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xbfd1e5);
-scene.fog = new THREE.FogExp2(0xbfd1e5, 0.04); 
+scene.fog = new THREE.FogExp2(0xbfd1e5, 0.03); // 霧氣稍微調淡，可以看到更遠的山
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -16,7 +16,7 @@ const controls = new PointerLockControls(camera, document.body);
 const overlay = document.getElementById('overlay');
 const crosshair = document.getElementById('crosshair');
 
-// --- B. 區塊與記憶系統 ---
+// --- B. 多層次地形與區塊系統 ---
 const CHUNK_SIZE = 16;
 const RENDER_DISTANCE = 2;
 const loadedChunks = new Map();
@@ -24,15 +24,21 @@ const blocks = [];
 const removedBlocks = new Set(); 
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 
-// 高度雜訊
+// 模擬柏林雜訊的多層疊加 (Fractal Brownian Motion)
 function getNoiseHeight(x, z) {
-    return Math.round(Math.sin(x * 0.1) * Math.cos(z * 0.1) * 2 + Math.sin(x * 0.05) * 2);
+    // 層次 1：巨大的山脈 (低頻、高幅)
+    let mountain = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 5;
+    // 層次 2：起伏的小丘 (中頻、中幅)
+    let hills = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 2;
+    // 層次 3：地表凹凸細節 (高頻、低幅)
+    let detail = Math.sin(x * 0.4) * Math.cos(z * 0.4) * 0.5;
+    
+    // 將三者疊加，並確保地形不會太「平」
+    return Math.round(mountain + hills + detail);
 }
 
-// 生態系雜訊：決定哪裡是沙漠
 function getBiomeNoise(x, z) {
-    // 使用較大的波長 (0.02) 讓沙漠地區看起來比較廣大
-    return Math.sin(x * 0.02) + Math.cos(z * 0.02);
+    return Math.sin(x * 0.015) + Math.cos(z * 0.015);
 }
 
 function updateNeighbors(x, y, z) {
@@ -41,7 +47,7 @@ function updateNeighbors(x, y, z) {
         const nx = x + dx, ny = y + dy, nz = z + dz;
         const posKey = `${nx},${ny},${nz}`;
         if (removedBlocks.has(posKey)) return;
-        if (ny > getNoiseHeight(nx, nz) || ny < -15) return;
+        if (ny > getNoiseHeight(nx, nz) || ny < -20) return; // 深度限制調深一點
         const exists = blocks.some(b => Math.abs(b.position.x - nx) < 0.1 && Math.abs(b.position.y - ny) < 0.1 && Math.abs(b.position.z - nz) < 0.1);
         if (!exists) {
             const m = new THREE.Mesh(boxGeo, getMaterials('stone'));
@@ -63,9 +69,7 @@ function spawnChunk(cx, cz) {
             const wz = cz * CHUNK_SIZE + z;
             const h = getNoiseHeight(wx, wz);
             const biomeVal = getBiomeNoise(wx, wz);
-            
-            // 判定是否為沙漠 (當 biomeVal > 0.5 時)
-            const isDesert = biomeVal > 0.5;
+            const isDesert = biomeVal > 0.6;
 
             if (!removedBlocks.has(`${wx},${h},${wz}`)) {
                 const type = isDesert ? 'sand' : 'grass';
@@ -75,8 +79,8 @@ function spawnChunk(cx, cz) {
                 blocks.push(m);
                 chunkBlocks.push(m);
 
-                // 只有非沙漠區才隨機生成樹木
-                if (!isDesert && h >= 0 && Math.random() < 0.02) {
+                // 生成樹木邏輯 (只在平坦一點的草地長樹，增加真實感)
+                if (!isDesert && h >= 0 && Math.random() < 0.015) {
                     const treeH = 3 + Math.floor(Math.random() * 2);
                     for (let ty = 1; ty <= treeH; ty++) {
                         const wood = new THREE.Mesh(boxGeo, getMaterials('wood'));
@@ -130,17 +134,16 @@ function processQueue() {
     }
 }
 
-// --- C. UI 物品欄 (擴充至 5 格) ---
+// --- C. UI ---
 const hotbar = document.createElement('div');
 hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:5px; background:rgba(0,0,0,0.6); padding:5px; border:2px solid #333; display:none;`;
 document.body.appendChild(hotbar);
 const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand'];
-const blockNames = ['草地', '石頭', '木頭', '葉子', '沙子'];
 const slots = [];
 for (let i = 0; i < 5; i++) {
     const slot = document.createElement('div');
-    slot.style.cssText = `width:50px; height:50px; border:2px solid #8b8b8b; background:#555; display:flex; align-items:center; justify-content:center; color:white; font-size:10px; text-align:center;`;
-    slot.innerHTML = (i + 1) + '<br>' + blockNames[i];
+    slot.style.cssText = `width:50px; height:50px; border:2px solid #8b8b8b; background:#555; display:flex; align-items:center; justify-content:center; color:white; font-size:12px;`;
+    slot.innerHTML = i + 1;
     hotbar.appendChild(slot);
     slots.push(slot);
 }
@@ -151,7 +154,6 @@ document.getElementById('btn-play').addEventListener('click', () => controls.loc
 controls.addEventListener('lock', () => { overlay.style.display = 'none'; crosshair.style.display = 'block'; hotbar.style.display = 'flex'; });
 controls.addEventListener('unlock', () => { overlay.style.display = 'flex'; crosshair.style.display = 'none'; hotbar.style.display = 'none'; });
 
-// --- D. 控制與物理 ---
 let selectedIdx = 0;
 const velocity = new THREE.Vector3();
 const playerRadius = 0.35;
@@ -164,13 +166,14 @@ document.addEventListener('keydown', (e) => {
         const val = parseInt(e.code.replace('Digit', '')) - 1;
         if (val >= 0 && val < 5) { selectedIdx = val; updateSelection(val); }
     }
-    if (e.code === 'Space' && canJump) { velocity.y += 8.5; canJump = false; }
+    if (e.code === 'Space' && canJump) { velocity.y += 9.5; canJump = false; } // 加強一點跳躍力來應對陡坡
     if (e.shiftKey) isCrouching = true;
 });
 document.addEventListener('keyup', (e) => { 
     keys[e.code] = false;
     if (!e.shiftKey) isCrouching = false; 
 });
+
 window.addEventListener('wheel', (e) => {
     if (!controls.isLocked) return;
     selectedIdx = (selectedIdx + (e.deltaY > 0 ? 1 : -1) + 5) % 5;
@@ -206,7 +209,7 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const sun = new THREE.DirectionalLight(0xffffff, 0.6);
 sun.position.set(10, 20, 10);
 scene.add(sun);
-camera.position.set(0, 15, 0);
+camera.position.set(0, 20, 0); // 出生點設高一點，以免卡在山裡
 
 let prevT = performance.now();
 function animate() {
@@ -251,7 +254,7 @@ function animate() {
         if (groundH !== -999 && camera.position.y - currentHeight <= groundH) {
             velocity.y = 0; camera.position.y = groundH + currentHeight; canJump = true;
         } else if (groundH !== -999) { canJump = false; }
-        if (camera.position.y < -30) camera.position.set(0, 20, 0);
+        if (camera.position.y < -30) camera.position.set(0, 30, 0);
     }
     renderer.render(scene, camera);
 }
