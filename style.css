@@ -2,26 +2,50 @@ body { margin: 0; overflow: hidden; background-color: #000; }
 
 #game-container { width: 100vw; height: 100vh; }
 
+/* 準心 */
 #crosshair {
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%);
     color: white; font-size: 24px; font-weight: bold;
     pointer-events: none; display: none;
     text-shadow: 1px 1px 2px black;
+    z-index: 5;
 }
 
+/* 開始介面遮罩 - 加入泥土背景圖 */
 #overlay {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.5); display: flex;
+    /* 這裡使用 CSS 繪製重複的泥土像素圖樣 */
+    background-color: #3a2618;
+    background-image: 
+        linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), /* 深色遮罩 */
+        repeating-conic-gradient(#3a2618 0% 25%, #4a311f 0% 50%) 0% 0% / 64px 64px;
+    display: flex;
     justify-content: center; align-items: center; z-index: 10;
 }
 
+/* 菜單選框 */
 #menu {
-    background: rgba(255,255,255,0.9); padding: 40px;
-    border-radius: 10px; text-align: center; font-family: sans-serif;
+    background: rgba(0, 0, 0, 0.8); /* 改成深色 Minecraft 風格 */
+    padding: 40px;
+    border: 4px solid #8b8b8b;
+    border-radius: 0px; /* 移除圓角，更有方塊感 */
+    text-align: center;
+    font-family: 'Courier New', Courier, monospace; /* 使用等寬字體 */
+    color: white;
 }
 
 #btn-play {
     padding: 15px 30px; font-size: 20px; cursor: pointer;
-    background: #5dad44; color: white; border: none; border-radius: 5px;
+    background: #5dad44; color: white; border: 3px solid #333;
+    transition: background 0.2s;
+}
+
+#btn-play:hover {
+    background: #77bc43;
+}
+
+/* 物品欄 (Hotbar) 樣式維持不變 */
+#hotbar {
+    border-radius: 0px !important;
 }
