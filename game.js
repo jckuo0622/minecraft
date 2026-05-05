@@ -19,19 +19,21 @@ document.getElementById('btn-play').addEventListener('click', () => controls.loc
 controls.addEventListener('lock', () => { overlay.style.display = 'none'; crosshair.style.display = 'block'; });
 controls.addEventListener('unlock', () => { overlay.style.display = 'flex'; crosshair.style.display = 'none'; });
 
-// --- B. 生成世界 ---
+// --- B. 生成世界 (map 放在 Y=0) ---
 const grassMaterials = getGrassMaterials();
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const blocks = [];
 for (let x = -10; x < 10; x++) {
     for (let z = -10; z < 10; z++) {
         const m = new THREE.Mesh(boxGeo, grassMaterials);
+        // 原本的地圖方塊放在 Y=0
         m.position.set(x, 0, z);
         scene.add(m);
         blocks.push(m);
     }
 }
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+// 初始位置在 Y=1.7 (視線高度)
 camera.position.set(0, 1.7, 5);
 
 // --- C. 狀態變數 ---
@@ -82,7 +84,7 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
 
-        // 1. 儲存移動前的位置 (用於站立安全回彈)
+        // 1. 儲存移動前的位置 (用於站立安全回彈 - **B13505015的侑呈最愛的功能**)
         const oldX = camera.position.x;
         const oldZ = camera.position.z;
 
@@ -115,25 +117,26 @@ function animate() {
         // 3. 取得當前地面高度
         const currentGround = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius);
 
-        // 4. 分軸移動檢查
+        // 4. 分軸移動檢查與潛行防掉落
         const nextX = camera.position.x + velocity.x * dt;
         let canMoveX = !checkWall(nextX, camera.position.y, camera.position.z, blocks, playerRadius);
         if (isCrouching && canJump && canMoveX) {
-            if (getGroundAt(nextX, camera.position.z, blocks, playerRadius) === -1) canMoveX = false;
+            // 如果移動後的高度變為 -Infinity (無盡虛空)，且在潛行，則封鎖移動。
+            if (getGroundAt(nextX, camera.position.z, blocks, playerRadius) === -Infinity) canMoveX = false;
         }
         if (canMoveX) camera.position.x = nextX;
 
         const nextZ = camera.position.z + velocity.z * dt;
         let canMoveZ = !checkWall(camera.position.x, camera.position.y, nextZ, blocks, playerRadius);
         if (isCrouching && canJump && canMoveZ) {
-            if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius) === -1) canMoveZ = false;
+            if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius) === -Infinity) canMoveZ = false;
         }
         if (canMoveZ) camera.position.z = nextZ;
 
-        // --- 核心：站立安全回彈 (Standing Safety Nudge) ---
-        // 如果玩家現在是「站著」且「在地上」，但偵測到腳下已經懸空 (這通常發生在放開 Shift 的瞬間)
+        // --- 重點：站立安全回彈 (Standing Safety Nudge) ---
+        // 當放開 Shift 的瞬間，如果腳下已經懸空 (這在 Minecraft 是安全行為，不應掉落)
         if (!isCrouching && canJump) {
-            if (getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius) === -1) {
+            if (getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius) === -Infinity) {
                 // 強制推回上一個安全的座標
                 camera.position.x = oldX;
                 camera.position.z = oldZ;
@@ -142,19 +145,24 @@ function animate() {
             }
         }
 
-        // 5. 垂直位移與落地
+        // 5. 垂直位移與真實落地判定
         camera.position.y += velocity.y * dt;
         const finalGround = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius);
 
+        // 真實落地判定：只有當腳底座標 低於或等於 方塊表面時，才算落地。
         if (camera.position.y - currentHeight <= finalGround) {
             if (velocity.y < 0) {
                 velocity.y = 0;
-                camera.position.y = finalGround + currentHeight;
-                canJump = true;
+                // 將相機位置精確設定為方塊表面上方一點點。
+                // 如果 finalGround 為 -Infinity，這裡的 target y 就會變得極低。
+                camera.position.y = (finalGround === -Infinity ? -1000 : finalGround) + currentHeight;
+                // 如果是在虛空，不能跳
+                canJump = (finalGround !== -Infinity); 
             }
         } else {
-            canJump = false;
+            canJump = false; // 在空中不能跳
         }
+        
         prevT = t;
     }
     renderer.render(scene, camera);
