@@ -18,6 +18,11 @@ export function getMaterials(type) {
         const stone = createPixelTexture('#888888', '#777777');
         return new Array(6).fill(new THREE.MeshLambertMaterial({map: stone}));
     } 
+    else if (type === 'sand') {
+        // 新增：黃色系的像素質感
+        const sand = createPixelTexture('#e2c693', '#d1b47e');
+        return new Array(6).fill(new THREE.MeshLambertMaterial({map: sand}));
+    }
     else if (type === 'wood') {
         const top = createPixelTexture('#6b4226', '#5d3a21');
         const side = createPixelTexture('#4d2d18', '#3e2413');
@@ -28,7 +33,6 @@ export function getMaterials(type) {
         ];
     } 
     else if (type === 'leaf') {
-        // 新增：深淺交替的葉子綠色
         const leaf = createPixelTexture('#2d5a27', '#3d7a33');
         return new Array(6).fill(new THREE.MeshLambertMaterial({map: leaf, transparent: true, opacity: 0.9}));
     }

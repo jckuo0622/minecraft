@@ -24,8 +24,15 @@ const blocks = [];
 const removedBlocks = new Set(); 
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 
+// 高度雜訊
 function getNoiseHeight(x, z) {
     return Math.round(Math.sin(x * 0.1) * Math.cos(z * 0.1) * 2 + Math.sin(x * 0.05) * 2);
+}
+
+// 生態系雜訊：決定哪裡是沙漠
+function getBiomeNoise(x, z) {
+    // 使用較大的波長 (0.02) 讓沙漠地區看起來比較廣大
+    return Math.sin(x * 0.02) + Math.cos(z * 0.02);
 }
 
 function updateNeighbors(x, y, z) {
@@ -55,19 +62,22 @@ function spawnChunk(cx, cz) {
             const wx = cx * CHUNK_SIZE + x;
             const wz = cz * CHUNK_SIZE + z;
             const h = getNoiseHeight(wx, wz);
+            const biomeVal = getBiomeNoise(wx, wz);
             
-            // 1. 生成草地 (如果沒被挖掉)
+            // 判定是否為沙漠 (當 biomeVal > 0.5 時)
+            const isDesert = biomeVal > 0.5;
+
             if (!removedBlocks.has(`${wx},${h},${wz}`)) {
-                const m = new THREE.Mesh(boxGeo, getMaterials('grass'));
+                const type = isDesert ? 'sand' : 'grass';
+                const m = new THREE.Mesh(boxGeo, getMaterials(type));
                 m.position.set(wx, h, wz);
                 scene.add(m);
                 blocks.push(m);
                 chunkBlocks.push(m);
 
-                // 2. 隨機生成樹木 (2% 機率)
-                if (h >= 0 && Math.random() < 0.02) {
+                // 只有非沙漠區才隨機生成樹木
+                if (!isDesert && h >= 0 && Math.random() < 0.02) {
                     const treeH = 3 + Math.floor(Math.random() * 2);
-                    // 樹幹
                     for (let ty = 1; ty <= treeH; ty++) {
                         const wood = new THREE.Mesh(boxGeo, getMaterials('wood'));
                         wood.position.set(wx, h + ty, wz);
@@ -75,7 +85,6 @@ function spawnChunk(cx, cz) {
                         blocks.push(wood);
                         chunkBlocks.push(wood);
                     }
-                    // 樹葉
                     for (let lx = -1; lx <= 1; lx++) {
                         for (let lz = -1; lz <= 1; lz++) {
                             for (let ly = 0; ly < 2; ly++) {
@@ -121,16 +130,17 @@ function processQueue() {
     }
 }
 
-// --- C. UI ---
+// --- C. UI 物品欄 (擴充至 5 格) ---
 const hotbar = document.createElement('div');
 hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:5px; background:rgba(0,0,0,0.6); padding:5px; border:2px solid #333; display:none;`;
 document.body.appendChild(hotbar);
-const blockTypes = ['grass', 'stone', 'wood', 'leaf'];
+const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand'];
+const blockNames = ['草地', '石頭', '木頭', '葉子', '沙子'];
 const slots = [];
-for (let i = 0; i < 4; i++) {
+for (let i = 0; i < 5; i++) {
     const slot = document.createElement('div');
-    slot.style.cssText = `width:50px; height:50px; border:2px solid #8b8b8b; background:#555; display:flex; align-items:center; justify-content:center; color:white; font-size:12px;`;
-    slot.innerHTML = i + 1;
+    slot.style.cssText = `width:50px; height:50px; border:2px solid #8b8b8b; background:#555; display:flex; align-items:center; justify-content:center; color:white; font-size:10px; text-align:center;`;
+    slot.innerHTML = (i + 1) + '<br>' + blockNames[i];
     hotbar.appendChild(slot);
     slots.push(slot);
 }
@@ -141,6 +151,7 @@ document.getElementById('btn-play').addEventListener('click', () => controls.loc
 controls.addEventListener('lock', () => { overlay.style.display = 'none'; crosshair.style.display = 'block'; hotbar.style.display = 'flex'; });
 controls.addEventListener('unlock', () => { overlay.style.display = 'flex'; crosshair.style.display = 'none'; hotbar.style.display = 'none'; });
 
+// --- D. 控制與物理 ---
 let selectedIdx = 0;
 const velocity = new THREE.Vector3();
 const playerRadius = 0.35;
@@ -151,7 +162,7 @@ document.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if (e.code.startsWith('Digit')) {
         const val = parseInt(e.code.replace('Digit', '')) - 1;
-        if (val >= 0 && val < 4) { selectedIdx = val; updateSelection(val); }
+        if (val >= 0 && val < 5) { selectedIdx = val; updateSelection(val); }
     }
     if (e.code === 'Space' && canJump) { velocity.y += 8.5; canJump = false; }
     if (e.shiftKey) isCrouching = true;
@@ -160,10 +171,9 @@ document.addEventListener('keyup', (e) => {
     keys[e.code] = false;
     if (!e.shiftKey) isCrouching = false; 
 });
-
 window.addEventListener('wheel', (e) => {
     if (!controls.isLocked) return;
-    selectedIdx = (selectedIdx + (e.deltaY > 0 ? 1 : -1) + 4) % 4;
+    selectedIdx = (selectedIdx + (e.deltaY > 0 ? 1 : -1) + 5) % 5;
     updateSelection(selectedIdx);
 }, { passive: true });
 
@@ -196,7 +206,7 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const sun = new THREE.DirectionalLight(0xffffff, 0.6);
 sun.position.set(10, 20, 10);
 scene.add(sun);
-camera.position.set(0, 10, 0);
+camera.position.set(0, 15, 0);
 
 let prevT = performance.now();
 function animate() {
