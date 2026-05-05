@@ -53,33 +53,25 @@ document.addEventListener('keyup', (e) => {
     if (!e.shiftKey) isCrouching = false;
 });
 
-// --- E. 挖掘與建造 (這次補回來的重點) ---
+// --- E. 挖掘與建造 ---
 const raycaster = new THREE.Raycaster();
 window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
-
-    // 從畫面中心（準心位置）發射射線
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
     const intersects = raycaster.intersectObjects(blocks);
-
     if (intersects.length > 0) {
         const intersect = intersects[0];
-
-        if (e.button === 0) { // 左鍵：挖掉方塊
+        if (e.button === 0) { 
             scene.remove(intersect.object);
             blocks.splice(blocks.indexOf(intersect.object), 1);
-        } 
-        else if (e.button === 2) { // 右鍵：放置方塊
+        } else if (e.button === 2) {
             const newBlock = new THREE.Mesh(boxGeo, grassMaterials);
-            // 根據點擊到的面法線方向決定新方塊位置
             newBlock.position.copy(intersect.object.position).add(intersect.face.normal);
             scene.add(newBlock);
             blocks.push(newBlock);
         }
     }
 });
-
-// 阻擋右鍵選單彈出
 window.addEventListener('contextmenu', e => e.preventDefault());
 
 // --- F. 遊戲主迴圈 ---
@@ -90,6 +82,11 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
 
+        // 1. 儲存移動前的位置 (用於站立安全回彈)
+        const oldX = camera.position.x;
+        const oldZ = camera.position.z;
+
+        // 2. 視角高度平滑切換
         const targetH = isCrouching ? 1.3 : 1.7;
         currentHeight += (targetH - currentHeight) * 0.15;
 
@@ -115,22 +112,37 @@ function animate() {
             velocity.z += moveDir.z * speed * dt;
         }
 
+        // 3. 取得當前地面高度
         const currentGround = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius);
 
+        // 4. 分軸移動檢查
         const nextX = camera.position.x + velocity.x * dt;
         let canMoveX = !checkWall(nextX, camera.position.y, camera.position.z, blocks, playerRadius);
         if (isCrouching && canJump && canMoveX) {
-            if (getGroundAt(nextX, camera.position.z, blocks, playerRadius) < currentGround - 0.1) canMoveX = false;
+            if (getGroundAt(nextX, camera.position.z, blocks, playerRadius) === -1) canMoveX = false;
         }
         if (canMoveX) camera.position.x = nextX;
 
         const nextZ = camera.position.z + velocity.z * dt;
         let canMoveZ = !checkWall(camera.position.x, camera.position.y, nextZ, blocks, playerRadius);
         if (isCrouching && canJump && canMoveZ) {
-            if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius) < currentGround - 0.1) canMoveZ = false;
+            if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius) === -1) canMoveZ = false;
         }
         if (canMoveZ) camera.position.z = nextZ;
 
+        // --- 核心：站立安全回彈 (Standing Safety Nudge) ---
+        // 如果玩家現在是「站著」且「在地上」，但偵測到腳下已經懸空 (這通常發生在放開 Shift 的瞬間)
+        if (!isCrouching && canJump) {
+            if (getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius) === -1) {
+                // 強制推回上一個安全的座標
+                camera.position.x = oldX;
+                camera.position.z = oldZ;
+                velocity.x = 0;
+                velocity.z = 0;
+            }
+        }
+
+        // 5. 垂直位移與落地
         camera.position.y += velocity.y * dt;
         const finalGround = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius);
 
