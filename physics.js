@@ -2,7 +2,7 @@ export function getGroundAt(x, z, blocks, playerRadius, feetY) {
     let maxH = -Infinity; 
     for (let b of blocks) {
         const bPos = b.position;
-        // 只偵測身邊 2 單位內的方塊
+        // 局部偵測優化：只檢查腳下 2 單位內的方塊
         if (Math.abs(bPos.x - x) > 2 || Math.abs(bPos.z - z) > 2) continue;
 
         const intersectX = (x + playerRadius > bPos.x - 0.5) && (x - playerRadius < bPos.x + 0.5);

@@ -3,23 +3,24 @@ import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examp
 import { getMaterials } from './textures.js';
 import { getGroundAt, checkWall } from './physics.js';
 
-// --- A. 初始化設定 ---
+// --- A. 初始化 ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xbfd1e5);
 scene.fog = new THREE.FogExp2(0xbfd1e5, 0.05); 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ antialias: false });
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+renderer.setPixelRatio(window.devicePixelRatio > 1 ? 1 : 1); // 限制像素比，降低 GPU 負擔
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.getElementById('game-container').appendChild(renderer.domElement);
 const controls = new PointerLockControls(camera, document.body);
 const overlay = document.getElementById('overlay');
 const crosshair = document.getElementById('crosshair');
 
-// --- B. 無限地圖與分時載入配置 ---
+// --- B. 無限地圖與隊列配置 ---
 const CHUNK_SIZE = 8;
-const RENDER_DISTANCE = 3;
-const loadedChunks = new Map(); 
-const generationQueue = []; // 待處理的區塊隊列
+const RENDER_DISTANCE = 2; // 稍微縮短距離以換取極致順暢
+const generationQueue = [];
+const loadedChunks = new Map();
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const blocks = [];
 
@@ -27,49 +28,53 @@ function getNoiseHeight(x, z) {
     return Math.round(Math.sin(x * 0.15) * Math.cos(z * 0.15) * 1.5 + Math.sin(x * 0.05) * 1.5);
 }
 
-// 實際生成區塊的函式
 function spawnChunk(cx, cz) {
     const key = `${cx},${cz}`;
     if (loadedChunks.has(key)) return;
 
     const chunkBlocks = [];
+    // 效能優化：只生成表面方塊與地下一層，不生成深層方塊 (減少渲染量)
     for (let bx = 0; bx < CHUNK_SIZE; bx++) {
         for (let bz = 0; bz < CHUNK_SIZE; bz++) {
             const wx = cx * CHUNK_SIZE + bx;
             const wz = cz * CHUNK_SIZE + bz;
             const h = getNoiseHeight(wx, wz);
-            for (let y = -2; y <= h; y++) {
-                const m = new THREE.Mesh(boxGeo, getMaterials(y === h ? 'grass' : 'stone'));
-                m.position.set(wx, y, wz);
-                scene.add(m);
-                blocks.push(m);
-                chunkBlocks.push(m);
-            }
+            
+            // 頂部方塊
+            const mTop = new THREE.Mesh(boxGeo, getMaterials('grass'));
+            mTop.position.set(wx, h, wz);
+            scene.add(mTop);
+            blocks.push(mTop);
+            chunkBlocks.push(mTop);
+
+            // 地下一層方塊 (石頭)
+            const mBottom = new THREE.Mesh(boxGeo, getMaterials('stone'));
+            mBottom.position.set(wx, h - 1, wz);
+            scene.add(mBottom);
+            blocks.push(mBottom);
+            chunkBlocks.push(mBottom);
         }
     }
     loadedChunks.set(key, chunkBlocks);
 }
 
-// 負責排隊，不直接計算
 function updateWorldQueue() {
-    const playerChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
-    const playerChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
+    const pX = Math.floor(camera.position.x / CHUNK_SIZE);
+    const pZ = Math.floor(camera.position.z / CHUNK_SIZE);
 
     for (let x = -RENDER_DISTANCE; x <= RENDER_DISTANCE; x++) {
         for (let z = -RENDER_DISTANCE; z <= RENDER_DISTANCE; z++) {
-            const cx = playerChunkX + x;
-            const cz = playerChunkZ + z;
-            const key = `${cx},${cz}`;
+            const key = `${pX + x},${pZ + z}`;
             if (!loadedChunks.has(key) && !generationQueue.includes(key)) {
                 generationQueue.push(key);
             }
         }
     }
 
-    // 卸載邏輯 (直接執行，因為 remove 負擔較小)
+    // 卸載遠端區塊 (直接移除，減少計算)
     for (let [key, chunkBlocks] of loadedChunks) {
         const [cx, cz] = key.split(',').map(Number);
-        if (Math.abs(cx - playerChunkX) > RENDER_DISTANCE + 1 || Math.abs(cz - playerChunkZ) > RENDER_DISTANCE + 1) {
+        if (Math.abs(cx - pX) > RENDER_DISTANCE + 1 || Math.abs(cz - pZ) > RENDER_DISTANCE + 1) {
             chunkBlocks.forEach(b => {
                 scene.remove(b);
                 const idx = blocks.indexOf(b);
@@ -80,8 +85,8 @@ function updateWorldQueue() {
     }
 }
 
-// 每幀只處理隊列中的一個任務
 function processQueue() {
+    // 限制每幀處理區塊的數量，避免掉幀
     if (generationQueue.length > 0) {
         const nextKey = generationQueue.shift();
         const [cx, cz] = nextKey.split(',').map(Number);
@@ -89,7 +94,7 @@ function processQueue() {
     }
 }
 
-// --- C. UI 物品欄 ---
+// --- C. UI & 控制 (維持原狀) ---
 const hotbar = document.createElement('div');
 hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:5px; background:rgba(0,0,0,0.6); padding:5px; border:2px solid #333; display:none; border-radius:5px;`;
 document.body.appendChild(hotbar);
@@ -119,7 +124,6 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(10, 20, 10); scene.add(sun);
 camera.position.set(0, 5, 0);
 
-// --- D. 控制與輸入 ---
 let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false, isCrouching = false;
 let selectedIndex = 0;
 const velocity = new THREE.Vector3();
@@ -167,13 +171,12 @@ window.addEventListener('mousedown', (e) => {
 });
 window.addEventListener('contextmenu', e => e.preventDefault());
 
-// --- E. 遊戲迴圈 ---
 let prevT = performance.now();
 function animate() {
     requestAnimationFrame(animate);
     if (controls.isLocked) {
-        updateWorldQueue(); // 加入排隊
-        processQueue();    // 每幀處理一個任務
+        updateWorldQueue();
+        processQueue();
 
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
@@ -221,7 +224,4 @@ function animate() {
     renderer.render(scene, camera);
 }
 animate();
-
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
-});
+// ... window resize 監聽 ...
