@@ -21,40 +21,21 @@ const CHUNK_SIZE = 16;
 const RENDER_DISTANCE = 2;
 const loadedChunks = new Map();
 const blocks = []; 
-const removedBlocks = new Set(); // 新增：紀錄被挖掉的空間座標 (x,y,z)
+const removedBlocks = new Set(); 
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 
 function getNoiseHeight(x, z) {
     return Math.round(Math.sin(x * 0.1) * Math.cos(z * 0.1) * 2 + Math.sin(x * 0.05) * 2);
 }
 
-// 核心：補洞邏輯優化
 function updateNeighbors(x, y, z) {
-    const directions = [
-        [1, 0, 0], [-1, 0, 0],
-        [0, 1, 0], [0, -1, 0],
-        [0, 0, 1], [0, 0, -1]
-    ];
-
+    const directions = [[1,0,0], [-1,0,0], [0,1,0], [0,-1,0], [0,0,1], [0,0,-1]];
     directions.forEach(([dx, dy, dz]) => {
-        const nx = x + dx;
-        const ny = y + dy;
-        const nz = z + dz;
+        const nx = x + dx, ny = y + dy, nz = z + dz;
         const posKey = `${nx},${ny},${nz}`;
-
-        // 1. 如果這個位置是玩家剛剛挖掉的，絕對不補
         if (removedBlocks.has(posKey)) return;
-
-        // 2. 限制高度與地底極限
         if (ny > getNoiseHeight(nx, nz) || ny < -15) return;
-
-        // 3. 檢查是否已有方塊
-        const exists = blocks.some(b => 
-            Math.abs(b.position.x - nx) < 0.1 && 
-            Math.abs(b.position.y - ny) < 0.1 && 
-            Math.abs(b.position.z - nz) < 0.1
-        );
-
+        const exists = blocks.some(b => Math.abs(b.position.x - nx) < 0.1 && Math.abs(b.position.y - ny) < 0.1 && Math.abs(b.position.z - nz) < 0.1);
         if (!exists) {
             const m = new THREE.Mesh(boxGeo, getMaterials('stone'));
             m.position.set(nx, ny, nz);
@@ -68,19 +49,46 @@ function spawnChunk(cx, cz) {
     const key = `${cx},${cz}`;
     if (loadedChunks.has(key)) return;
     const chunkBlocks = [];
+
     for (let x = 0; x < CHUNK_SIZE; x++) {
         for (let z = 0; z < CHUNK_SIZE; z++) {
             const wx = cx * CHUNK_SIZE + x;
             const wz = cz * CHUNK_SIZE + z;
             const h = getNoiseHeight(wx, wz);
             
-            // 只有當這個座標沒被挖過時才生成
+            // 1. 生成草地 (如果沒被挖掉)
             if (!removedBlocks.has(`${wx},${h},${wz}`)) {
                 const m = new THREE.Mesh(boxGeo, getMaterials('grass'));
                 m.position.set(wx, h, wz);
                 scene.add(m);
                 blocks.push(m);
                 chunkBlocks.push(m);
+
+                // 2. 隨機生成樹木 (2% 機率)
+                if (h >= 0 && Math.random() < 0.02) {
+                    const treeH = 3 + Math.floor(Math.random() * 2);
+                    // 樹幹
+                    for (let ty = 1; ty <= treeH; ty++) {
+                        const wood = new THREE.Mesh(boxGeo, getMaterials('wood'));
+                        wood.position.set(wx, h + ty, wz);
+                        scene.add(wood);
+                        blocks.push(wood);
+                        chunkBlocks.push(wood);
+                    }
+                    // 樹葉
+                    for (let lx = -1; lx <= 1; lx++) {
+                        for (let lz = -1; lz <= 1; lz++) {
+                            for (let ly = 0; ly < 2; ly++) {
+                                if (Math.abs(lx) + Math.abs(lz) === 2 && Math.random() > 0.5) continue;
+                                const leaf = new THREE.Mesh(boxGeo, getMaterials('leaf'));
+                                leaf.position.set(wx + lx, h + treeH + ly + 1, wz + lz);
+                                scene.add(leaf);
+                                blocks.push(leaf);
+                                chunkBlocks.push(leaf);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -166,26 +174,18 @@ window.addEventListener('mousedown', (e) => {
     const intersects = raycaster.intersectObjects(blocks);
     if (intersects.length > 0) {
         const intersect = intersects[0];
-        if (e.button === 0) { // 左鍵挖掘
+        if (e.button === 0) { 
             const pos = intersect.object.position.clone();
-            const posKey = `${pos.x},${pos.y},${pos.z}`;
-            
-            // 紀錄被挖掉的位置
-            removedBlocks.add(posKey);
-            
+            removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
             scene.remove(intersect.object);
             const idx = blocks.indexOf(intersect.object);
             if (idx > -1) blocks.splice(idx, 1);
-            
             updateNeighbors(pos.x, pos.y, pos.z);
-        } else if (e.button === 2) { // 右鍵建造
+        } else if (e.button === 2) { 
             const b = new THREE.Mesh(boxGeo, getMaterials(blockTypes[selectedIdx]));
             const placePos = intersect.object.position.clone().add(intersect.face.normal);
             b.position.copy(placePos);
-            
-            // 如果在之前挖掉的地方蓋東西，要從移除紀錄中刪掉，否則以後沒辦法在旁邊補洞
             removedBlocks.delete(`${placePos.x},${placePos.y},${placePos.z}`);
-            
             scene.add(b); blocks.push(b);
         }
     }
@@ -198,7 +198,6 @@ sun.position.set(10, 20, 10);
 scene.add(sun);
 camera.position.set(0, 10, 0);
 
-// --- E. 物理循環 ---
 let prevT = performance.now();
 function animate() {
     requestAnimationFrame(animate);
@@ -208,18 +207,14 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
         prevT = t;
-
         const targetH = isCrouching ? 1.2 : 1.7;
         currentHeight += (targetH - currentHeight) * 0.2;
         velocity.x -= velocity.x * 10 * dt;
         velocity.z -= velocity.z * 10 * dt;
-        
         const feetY = camera.position.y - currentHeight;
         const groundH = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, feetY);
-
         if (groundH === -999) { velocity.y = 0; }
         else { velocity.y -= 28 * dt; }
-
         const forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
         forward.y = 0; forward.normalize();
@@ -229,13 +224,11 @@ function animate() {
         if (keys['KeyS']) moveDir.sub(forward);
         if (keys['KeyA']) moveDir.add(right);
         if (keys['KeyD']) moveDir.sub(right);
-
         if (moveDir.length() > 0) {
             moveDir.normalize();
             velocity.x += moveDir.x * (isCrouching ? 25 : 65) * dt;
             velocity.z += moveDir.z * (isCrouching ? 25 : 65) * dt;
         }
-
         const nextX = camera.position.x + velocity.x * dt;
         if (!checkWall(nextX, camera.position.y, camera.position.z, blocks, playerRadius)) {
             if (getGroundAt(nextX, camera.position.z, blocks, playerRadius, feetY) !== -999) camera.position.x = nextX;
