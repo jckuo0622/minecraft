@@ -1,10 +1,16 @@
 export function getGroundAt(x, z, blocks, playerRadius, feetY) {
     let maxH = -Infinity; 
+    let foundAny = false; // 新增：是否偵測到任何方塊
+
     for (let b of blocks) {
         const bPos = b.position;
         if (Math.abs(bPos.x - x) > 1.5 || Math.abs(bPos.z - z) > 1.5) continue;
+        
+        foundAny = true; // 只要附近有方塊，就代表這區已經加載了
+
         const intersectX = (x + playerRadius > bPos.x - 0.5) && (x - playerRadius < bPos.x + 0.5);
         const intersectZ = (z + playerRadius > bPos.z - 0.5) && (z - playerRadius < bPos.z + 0.5);
+        
         if (intersectX && intersectZ) {
             const blockTop = bPos.y + 0.5;
             if (blockTop <= feetY + 0.15) {
@@ -12,7 +18,9 @@ export function getGroundAt(x, z, blocks, playerRadius, feetY) {
             }
         }
     }
-    return maxH;
+    
+    // 如果附近完全沒有任何方塊，回傳一個特殊標記（例如 -999）
+    return foundAny ? maxH : -999;
 }
 
 export function checkWall(x, y, z, blocks, playerRadius) {
