@@ -20,7 +20,7 @@ const crosshair = document.getElementById('crosshair');
 const CHUNK_SIZE = 16;
 const RENDER_DISTANCE = 2;
 const loadedChunks = new Map();
-const blocks = [];
+const blocks = []; // 核心：這裡必須確實存放所有的 Mesh 物件
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 
 function getNoiseHeight(x, z) {
@@ -30,7 +30,8 @@ function getNoiseHeight(x, z) {
 function spawnChunk(cx, cz) {
     const key = `${cx},${cz}`;
     if (loadedChunks.has(key)) return;
-    const chunkGroup = new THREE.Group();
+    
+    const chunkBlocks = [];
     for (let x = 0; x < CHUNK_SIZE; x++) {
         for (let z = 0; z < CHUNK_SIZE; z++) {
             const wx = cx * CHUNK_SIZE + x;
@@ -38,12 +39,13 @@ function spawnChunk(cx, cz) {
             const h = getNoiseHeight(wx, wz);
             const m = new THREE.Mesh(boxGeo, getMaterials('grass'));
             m.position.set(wx, h, wz);
-            chunkGroup.add(m);
+            
+            scene.add(m); // 修正：直接加入 scene 而非 Group，確保 Raycaster 好抓取
             blocks.push(m);
+            chunkBlocks.push(m);
         }
     }
-    scene.add(chunkGroup);
-    loadedChunks.set(key, chunkGroup);
+    loadedChunks.set(key, chunkBlocks);
 }
 
 const generationQueue = [];
@@ -58,19 +60,21 @@ function updateWorld() {
             }
         }
     }
-    // 卸載
-    for (let [key, group] of loadedChunks) {
+    // 卸載遠處區塊
+    for (let [key, chunkBlocks] of loadedChunks) {
         const [cx, cz] = key.split(',').map(Number);
         if (Math.abs(cx - px) > RENDER_DISTANCE + 1 || Math.abs(cz - pz) > RENDER_DISTANCE + 1) {
-            group.children.forEach(b => { const idx = blocks.indexOf(b); if (idx > -1) blocks.splice(idx, 1); });
-            scene.remove(group);
+            chunkBlocks.forEach(b => {
+                scene.remove(b);
+                const idx = blocks.indexOf(b);
+                if (idx > -1) blocks.splice(idx, 1);
+            });
             loadedChunks.delete(key);
         }
     }
 }
 
 function processQueue() {
-    // 加速加載：一幀蓋 2 個區塊
     for(let i=0; i<2; i++) {
         if (generationQueue.length > 0) {
             const next = generationQueue.shift().split(',').map(Number);
@@ -79,7 +83,7 @@ function processQueue() {
     }
 }
 
-// --- C. UI (維持原樣) ---
+// --- C. UI 物品欄 ---
 const hotbar = document.createElement('div');
 hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:5px; background:rgba(0,0,0,0.6); padding:5px; border:2px solid #333; display:none;`;
 document.body.appendChild(hotbar);
@@ -99,13 +103,13 @@ document.getElementById('btn-play').addEventListener('click', () => controls.loc
 controls.addEventListener('lock', () => { overlay.style.display = 'none'; crosshair.style.display = 'block'; hotbar.style.display = 'flex'; });
 controls.addEventListener('unlock', () => { overlay.style.display = 'flex'; crosshair.style.display = 'none'; hotbar.style.display = 'none'; });
 
-// --- D. 物理與動畫 ---
+// --- D. 互動與控制 ---
 let selectedIdx = 0;
 const velocity = new THREE.Vector3();
 const playerRadius = 0.35;
 let canJump = false, isCrouching = false, currentHeight = 1.7;
-
 const keys = {};
+
 document.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if (e.code.startsWith('Digit')) {
@@ -119,26 +123,33 @@ document.addEventListener('keyup', (e) => {
     keys[e.code] = false;
     if (!e.shiftKey) isCrouching = false; 
 });
+
 window.addEventListener('wheel', (e) => {
     if (!controls.isLocked) return;
     selectedIdx = (selectedIdx + (e.deltaY > 0 ? 1 : -1) + 4) % 4;
     updateSelection(selectedIdx);
 }, { passive: true });
 
+// 核心修正：滑鼠事件
 window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+    
+    // 偵測 blocks 陣列中的所有物件
     const intersects = raycaster.intersectObjects(blocks);
+    
     if (intersects.length > 0) {
         const intersect = intersects[0];
-        if (e.button === 0) {
+        if (e.button === 0) { // 左鍵挖掘
             scene.remove(intersect.object);
-            blocks.splice(blocks.indexOf(intersect.object), 1);
-        } else if (e.button === 2) {
+            const idx = blocks.indexOf(intersect.object);
+            if (idx > -1) blocks.splice(idx, 1);
+        } else if (e.button === 2) { // 右鍵建造
             const b = new THREE.Mesh(boxGeo, getMaterials(blockTypes[selectedIdx]));
             b.position.copy(intersect.object.position).add(intersect.face.normal);
-            scene.add(b); blocks.push(b);
+            scene.add(b);
+            blocks.push(b);
         }
     }
 });
@@ -150,13 +161,13 @@ sun.position.set(10, 20, 10);
 scene.add(sun);
 camera.position.set(0, 10, 0);
 
+// --- E. 物理循環 ---
 let prevT = performance.now();
 function animate() {
     requestAnimationFrame(animate);
     if (controls.isLocked) {
         updateWorld();
         processQueue();
-
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
         prevT = t;
@@ -167,15 +178,13 @@ function animate() {
         velocity.x -= velocity.x * 10 * dt;
         velocity.z -= velocity.z * 10 * dt;
         
-        // 核心修正：檢查腳下狀態
         const feetY = camera.position.y - currentHeight;
         const groundH = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, feetY);
 
-        // 如果偵測到 -999 (未加載區)，暫停重力
         if (groundH === -999) {
-            velocity.y = 0; // 鎖死重力
+            velocity.y = 0;
         } else {
-            velocity.y -= 28 * dt; // 正常重力
+            velocity.y -= 28 * dt;
         }
 
         const forward = new THREE.Vector3();
@@ -194,25 +203,19 @@ function animate() {
             velocity.z += moveDir.z * (isCrouching ? 25 : 65) * dt;
         }
 
-        // 執行位移
         const nextX = camera.position.x + velocity.x * dt;
         if (!checkWall(nextX, camera.position.y, camera.position.z, blocks, playerRadius)) {
-            // 只有加載好的區域才允許移動，防止衝進虛空
             if (getGroundAt(nextX, camera.position.z, blocks, playerRadius, feetY) !== -999) {
                 camera.position.x = nextX;
             }
         }
-        
         const nextZ = camera.position.z + velocity.z * dt;
         if (!checkWall(camera.position.x, camera.position.y, nextZ, blocks, playerRadius)) {
             if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius, feetY) !== -999) {
                 camera.position.z = nextZ;
             }
         }
-
         camera.position.y += velocity.y * dt;
-        
-        // 落地判定 (排除未加載區)
         if (groundH !== -999 && camera.position.y - currentHeight <= groundH) {
             velocity.y = 0;
             camera.position.y = groundH + currentHeight;
@@ -220,9 +223,14 @@ function animate() {
         } else if (groundH !== -999) {
             canJump = false;
         }
-
         if (camera.position.y < -30) camera.position.set(0, 20, 0);
     }
     renderer.render(scene, camera);
 }
 animate();
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
