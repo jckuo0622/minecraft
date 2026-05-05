@@ -3,6 +3,7 @@ import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examp
 import { getGrassMaterials } from './textures.js';
 import { getGroundAt, checkWall } from './physics.js';
 
+// --- A. 初始化 ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -30,8 +31,9 @@ for (let x = -10; x < 10; x++) {
     }
 }
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-camera.position.set(0, 5, 5);
+camera.position.set(0, 2, 5);
 
+// --- B. 物理與控制 ---
 let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false, isCrouching = false;
 const velocity = new THREE.Vector3();
 const playerRadius = 0.3;
@@ -49,6 +51,7 @@ document.addEventListener('keyup', (e) => {
     if (!e.shiftKey) isCrouching = false;
 });
 
+// --- C. 互動邏輯 ---
 const raycaster = new THREE.Raycaster();
 window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
@@ -69,6 +72,7 @@ window.addEventListener('mousedown', (e) => {
 });
 window.addEventListener('contextmenu', e => e.preventDefault());
 
+// --- D. 遊戲迴圈 ---
 let prevT = performance.now();
 function animate() {
     requestAnimationFrame(animate);
@@ -76,7 +80,12 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
 
-        const targetH = isCrouching ? 1.3 : 1.7;
+        const oldX = camera.position.x;
+        const oldZ = camera.position.z;
+        const feetY = camera.position.y - currentHeight;
+
+        // 1. 視角高度同步
+        const targetH = isCrouching ? 1.2 : 1.7;
         currentHeight += (targetH - currentHeight) * 0.2;
 
         velocity.x -= velocity.x * 10 * dt;
@@ -96,63 +105,46 @@ function animate() {
 
         if (moveDir.length() > 0) {
             moveDir.normalize();
-            let speed = (isCrouching && canJump) ? 25 : 60; 
+            let speed = (isCrouching && canJump) ? 22 : 60;
             velocity.x += moveDir.x * speed * dt;
             velocity.z += moveDir.z * speed * dt;
         }
 
-        const oldX = camera.position.x;
-        const oldZ = camera.position.z;
-        const feetY = camera.position.y - currentHeight;
+        // 2. 核心：取得當前踩著的高度
+        const currentGroundH = getGroundAt(oldX, oldZ, blocks, playerRadius, feetY);
 
-        // 核心：分離 X 軸與 Z 軸的潛行判定
-        
-        // --- 處理 X 軸 ---
+        // 3. 分軸移動與高度落差檢查 (防掉落核心)
         const nextX = oldX + velocity.x * dt;
         let canMoveX = !checkWall(nextX, camera.position.y, oldZ, blocks, playerRadius);
-        
-        if (canMoveX) {
-            if (isCrouching && canJump) {
-                // 如果移動後腳下沒方塊
-                if (getGroundAt(nextX, oldZ, blocks, playerRadius, feetY) === -Infinity) {
-                    // 尋找最近的方塊邊界，把玩家拉回去
-                    // 這邊用一個簡單暴力但有效的方法：直接退回上一步
-                    camera.position.x = oldX;
-                    velocity.x = 0;
-                } else {
-                    camera.position.x = nextX;
-                }
-            } else {
-                camera.position.x = nextX;
+        if (isCrouching && canJump && canMoveX) {
+            // 如果下一步的高度比現在的高度低 (落差 > 0.1)，則鎖死 X 軸
+            if (getGroundAt(nextX, oldZ, blocks, playerRadius, feetY) < currentGroundH - 0.1) {
+                canMoveX = false;
+                velocity.x = 0;
             }
-        } else {
-            velocity.x = 0;
         }
+        if (canMoveX) camera.position.x = nextX;
 
-        // --- 處理 Z 軸 ---
         const nextZ = oldZ + velocity.z * dt;
         let canMoveZ = !checkWall(camera.position.x, camera.position.y, nextZ, blocks, playerRadius);
-
-        if (canMoveZ) {
-            if (isCrouching && canJump) {
-                if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius, feetY) === -Infinity) {
-                    // 同樣退回上一步
-                    camera.position.z = oldZ;
-                    velocity.z = 0;
-                } else {
-                    camera.position.z = nextZ;
-                }
-            } else {
-                camera.position.z = nextZ;
+        if (isCrouching && canJump && canMoveZ) {
+            if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius, feetY) < currentGroundH - 0.1) {
+                canMoveZ = false;
+                velocity.z = 0;
             }
-        } else {
-            velocity.z = 0;
+        }
+        if (canMoveZ) camera.position.z = nextZ;
+
+        // 4. 垂直處理與重生
+        camera.position.y += velocity.y * dt;
+        
+        // 重生機制：掉到虛空後回到原點
+        if (camera.position.y < -30) {
+            camera.position.set(0, 5, 0);
+            velocity.set(0, 0, 0);
         }
 
-        // 垂直位移與真實落地
-        camera.position.y += velocity.y * dt;
         const finalGround = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, camera.position.y - currentHeight);
-
         if (camera.position.y - currentHeight <= finalGround) {
             if (velocity.y < 0) {
                 velocity.y = 0;
@@ -162,21 +154,8 @@ function animate() {
         } else {
             canJump = false;
         }
-
-        // 重生機制
-        if (camera.position.y < -30) {
-            camera.position.set(0, 5, 0);
-            velocity.set(0, 0, 0);
-        }
-        
         prevT = t;
     }
     renderer.render(scene, camera);
 }
 animate();
-
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-});
