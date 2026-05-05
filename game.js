@@ -16,20 +16,20 @@ const controls = new PointerLockControls(camera, document.body);
 const overlay = document.getElementById('overlay');
 const crosshair = document.getElementById('crosshair');
 
-// --- B. 區塊與動態填充 ---
+// --- B. 區塊與記憶系統 ---
 const CHUNK_SIZE = 16;
 const RENDER_DISTANCE = 2;
 const loadedChunks = new Map();
 const blocks = []; 
+const removedBlocks = new Set(); // 新增：紀錄被挖掉的空間座標 (x,y,z)
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 
 function getNoiseHeight(x, z) {
     return Math.round(Math.sin(x * 0.1) * Math.cos(z * 0.1) * 2 + Math.sin(x * 0.05) * 2);
 }
 
-// 核心：全方位更新鄰居
+// 核心：補洞邏輯優化
 function updateNeighbors(x, y, z) {
-    // 定義 6 個檢查方向：前後左右上下
     const directions = [
         [1, 0, 0], [-1, 0, 0],
         [0, 1, 0], [0, -1, 0],
@@ -40,11 +40,15 @@ function updateNeighbors(x, y, z) {
         const nx = x + dx;
         const ny = y + dy;
         const nz = z + dz;
+        const posKey = `${nx},${ny},${nz}`;
 
-        // 限制不要往天上長石頭，也不要超過地底極限
+        // 1. 如果這個位置是玩家剛剛挖掉的，絕對不補
+        if (removedBlocks.has(posKey)) return;
+
+        // 2. 限制高度與地底極限
         if (ny > getNoiseHeight(nx, nz) || ny < -15) return;
 
-        // 檢查該位置是否已有方塊
+        // 3. 檢查是否已有方塊
         const exists = blocks.some(b => 
             Math.abs(b.position.x - nx) < 0.1 && 
             Math.abs(b.position.y - ny) < 0.1 && 
@@ -69,12 +73,15 @@ function spawnChunk(cx, cz) {
             const wx = cx * CHUNK_SIZE + x;
             const wz = cz * CHUNK_SIZE + z;
             const h = getNoiseHeight(wx, wz);
-            // 初始只生成地表
-            const m = new THREE.Mesh(boxGeo, getMaterials('grass'));
-            m.position.set(wx, h, wz);
-            scene.add(m);
-            blocks.push(m);
-            chunkBlocks.push(m);
+            
+            // 只有當這個座標沒被挖過時才生成
+            if (!removedBlocks.has(`${wx},${h},${wz}`)) {
+                const m = new THREE.Mesh(boxGeo, getMaterials('grass'));
+                m.position.set(wx, h, wz);
+                scene.add(m);
+                blocks.push(m);
+                chunkBlocks.push(m);
+            }
         }
     }
     loadedChunks.set(key, chunkBlocks);
@@ -93,11 +100,7 @@ function updateWorld() {
     for (let [key, chunkBlocks] of loadedChunks) {
         const [cx, cz] = key.split(',').map(Number);
         if (Math.abs(cx - px) > RENDER_DISTANCE + 1 || Math.abs(cz - pz) > RENDER_DISTANCE + 1) {
-            chunkBlocks.forEach(b => {
-                scene.remove(b);
-                const idx = blocks.indexOf(b);
-                if (idx > -1) blocks.splice(idx, 1);
-            });
+            chunkBlocks.forEach(b => { scene.remove(b); const idx = blocks.indexOf(b); if (idx > -1) blocks.splice(idx, 1); });
             loadedChunks.delete(key);
         }
     }
@@ -110,7 +113,7 @@ function processQueue() {
     }
 }
 
-// --- C. UI 物品欄 (維持 4 格) ---
+// --- C. UI ---
 const hotbar = document.createElement('div');
 hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:5px; background:rgba(0,0,0,0.6); padding:5px; border:2px solid #333; display:none;`;
 document.body.appendChild(hotbar);
@@ -165,15 +168,24 @@ window.addEventListener('mousedown', (e) => {
         const intersect = intersects[0];
         if (e.button === 0) { // 左鍵挖掘
             const pos = intersect.object.position.clone();
+            const posKey = `${pos.x},${pos.y},${pos.z}`;
+            
+            // 紀錄被挖掉的位置
+            removedBlocks.add(posKey);
+            
             scene.remove(intersect.object);
             const idx = blocks.indexOf(intersect.object);
             if (idx > -1) blocks.splice(idx, 1);
             
-            // 全方位補洞
             updateNeighbors(pos.x, pos.y, pos.z);
         } else if (e.button === 2) { // 右鍵建造
             const b = new THREE.Mesh(boxGeo, getMaterials(blockTypes[selectedIdx]));
-            b.position.copy(intersect.object.position).add(intersect.face.normal);
+            const placePos = intersect.object.position.clone().add(intersect.face.normal);
+            b.position.copy(placePos);
+            
+            // 如果在之前挖掉的地方蓋東西，要從移除紀錄中刪掉，否則以後沒辦法在旁邊補洞
+            removedBlocks.delete(`${placePos.x},${placePos.y},${placePos.z}`);
+            
             scene.add(b); blocks.push(b);
         }
     }
@@ -186,7 +198,7 @@ sun.position.set(10, 20, 10);
 scene.add(sun);
 camera.position.set(0, 10, 0);
 
-// --- E. 物理與循環 ---
+// --- E. 物理循環 ---
 let prevT = performance.now();
 function animate() {
     requestAnimationFrame(animate);
