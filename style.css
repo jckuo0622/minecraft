@@ -1,65 +1,54 @@
-body, html {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    overflow: hidden;
-    font-family: "Microsoft JhengHei", sans-serif;
+/* 物品欄容器 */
+#hotbar {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 5px;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 5px;
+    border: 2px solid #555;
+    border-radius: 4px;
 }
 
-#overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+/* 每個格子 */
+.slot {
+    width: 50px;
+    height: 50px;
+    background: rgba(128, 128, 128, 0.5);
+    border: 2px solid #333;
     display: flex;
     justify-content: center;
     align-items: center;
-    background: linear-gradient(to bottom, #00b4ff, #00a859);
-    z-index: 100;
-    text-align: center;
-    color: white;
+    position: relative;
 }
 
-.game-title {
-    font-size: 60px;
-    margin: 0;
-    text-shadow: 4px 4px 0px #006699;
+/* 被選中的格子 */
+.slot.active {
+    border-color: white;
+    background: rgba(255, 255, 255, 0.2);
+    box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.5);
 }
 
-.play-button {
-    margin: 25px 0;
-    background: #00aa44;
-    border: none;
-    padding: 15px 40px;
-    font-size: 28px;
-    color: white;
-    border-radius: 10px;
-    cursor: pointer;
-    box-shadow: 0px 6px 0px #005511;
+/* 格子裡的小方塊圖示 */
+.block-icon {
+    width: 30px;
+    height: 30px;
+    border: 1px solid rgba(0,0,0,0.2);
 }
 
-.play-button:active {
-    transform: translateY(4px);
-    box-shadow: 0px 2px 0px #005511;
-}
+.icon-grass { background: #5dad44; border-top: 5px solid #77bc43; }
+.icon-stone { background: #888888; }
+.icon-wood  { background: #6b4226; outline: 2px solid #4d2d18; }
 
-.controls-card {
-    background: rgba(0,0,0,0.3);
-    padding: 20px;
-    border-radius: 10px;
-    text-align: left;
-}
-
-#crosshair {
+/* 數字提示 */
+.slot::after {
+    content: attr(data-key);
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 16px;
-    height: 16px;
-    border: 2px solid white;
-    transform: translate(-50%, -50%);
-    z-index: 5;
-    display: none;
-    pointer-events: none;
+    top: 2px;
+    left: 4px;
+    font-size: 10px;
+    color: #eee;
+    font-family: 'Arial', sans-serif;
 }
