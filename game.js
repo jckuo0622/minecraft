@@ -3,7 +3,6 @@ import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examp
 import { getGrassMaterials } from './textures.js';
 import { getGroundAt, checkWall } from './physics.js';
 
-// --- A. 初始化環境 ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -19,30 +18,25 @@ document.getElementById('btn-play').addEventListener('click', () => controls.loc
 controls.addEventListener('lock', () => { overlay.style.display = 'none'; crosshair.style.display = 'block'; });
 controls.addEventListener('unlock', () => { overlay.style.display = 'flex'; crosshair.style.display = 'none'; });
 
-// --- B. 生成世界 (map 放在 Y=0) ---
 const grassMaterials = getGrassMaterials();
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const blocks = [];
 for (let x = -10; x < 10; x++) {
     for (let z = -10; z < 10; z++) {
         const m = new THREE.Mesh(boxGeo, grassMaterials);
-        // 原本的地圖方塊放在 Y=0
         m.position.set(x, 0, z);
         scene.add(m);
         blocks.push(m);
     }
 }
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-// 初始位置在 Y=1.7 (視線高度)
-camera.position.set(0, 1.7, 5);
+camera.position.set(0, 5, 5); // 初始生成稍微高一點
 
-// --- C. 狀態變數 ---
 let moveF = false, moveB = false, moveL = false, moveR = false, canJump = false, isCrouching = false;
 const velocity = new THREE.Vector3();
 const playerRadius = 0.3;
 let currentHeight = 1.7;
 
-// --- D. 輸入監聽 ---
 document.addEventListener('keydown', (e) => {
     if (e.code === 'KeyW') moveF = true; if (e.code === 'KeyS') moveB = true;
     if (e.code === 'KeyA') moveL = true; if (e.code === 'KeyD') moveR = true;
@@ -55,7 +49,6 @@ document.addEventListener('keyup', (e) => {
     if (!e.shiftKey) isCrouching = false;
 });
 
-// --- E. 挖掘與建造 ---
 const raycaster = new THREE.Raycaster();
 window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
@@ -76,7 +69,6 @@ window.addEventListener('mousedown', (e) => {
 });
 window.addEventListener('contextmenu', e => e.preventDefault());
 
-// --- F. 遊戲主迴圈 ---
 let prevT = performance.now();
 function animate() {
     requestAnimationFrame(animate);
@@ -84,11 +76,11 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
 
-        // 1. 儲存移動前的位置 (用於站立安全回彈 - **B13505015的侑呈最愛的功能**)
         const oldX = camera.position.x;
         const oldZ = camera.position.z;
+        const feetY = camera.position.y - currentHeight;
 
-        // 2. 視角高度平滑切換
+        // 視角高度
         const targetH = isCrouching ? 1.3 : 1.7;
         currentHeight += (targetH - currentHeight) * 0.15;
 
@@ -109,58 +101,55 @@ function animate() {
 
         if (moveDir.length() > 0) {
             moveDir.normalize();
-            let speed = isCrouching ? 20 : 60;
+            let speed = (isCrouching && canJump) ? 20 : 60;
             velocity.x += moveDir.x * speed * dt;
             velocity.z += moveDir.z * speed * dt;
         }
 
-        // 3. 取得當前地面高度
-        const currentGround = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius);
+        const groundH = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, feetY);
 
-        // 4. 分軸移動檢查與潛行防掉落
+        // 分軸移動檢查
         const nextX = camera.position.x + velocity.x * dt;
         let canMoveX = !checkWall(nextX, camera.position.y, camera.position.z, blocks, playerRadius);
         if (isCrouching && canJump && canMoveX) {
-            // 如果移動後的高度變為 -Infinity (無盡虛空)，且在潛行，則封鎖移動。
-            if (getGroundAt(nextX, camera.position.z, blocks, playerRadius) === -Infinity) canMoveX = false;
+            if (getGroundAt(nextX, camera.position.z, blocks, playerRadius, feetY) === -Infinity) canMoveX = false;
         }
         if (canMoveX) camera.position.x = nextX;
 
         const nextZ = camera.position.z + velocity.z * dt;
         let canMoveZ = !checkWall(camera.position.x, camera.position.y, nextZ, blocks, playerRadius);
         if (isCrouching && canJump && canMoveZ) {
-            if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius) === -Infinity) canMoveZ = false;
+            if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius, feetY) === -Infinity) canMoveZ = false;
         }
         if (canMoveZ) camera.position.z = nextZ;
 
-        // --- 重點：站立安全回彈 (Standing Safety Nudge) ---
-        // 當放開 Shift 的瞬間，如果腳下已經懸空 (這在 Minecraft 是安全行為，不應掉落)
+        // 潛行站立檢查
         if (!isCrouching && canJump) {
-            if (getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius) === -Infinity) {
-                // 強制推回上一個安全的座標
+            if (getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, feetY) === -Infinity) {
                 camera.position.x = oldX;
                 camera.position.z = oldZ;
-                velocity.x = 0;
-                velocity.z = 0;
             }
         }
 
-        // 5. 垂直位移與真實落地判定
+        // 垂直位移
         camera.position.y += velocity.y * dt;
-        const finalGround = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius);
+        const finalGround = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, camera.position.y - currentHeight);
 
-        // 真實落地判定：只有當腳底座標 低於或等於 方塊表面時，才算落地。
+        // 真實落地判定 (完全移除 1.7 的保底高度)
         if (camera.position.y - currentHeight <= finalGround) {
             if (velocity.y < 0) {
                 velocity.y = 0;
-                // 將相機位置精確設定為方塊表面上方一點點。
-                // 如果 finalGround 為 -Infinity，這裡的 target y 就會變得極低。
-                camera.position.y = (finalGround === -Infinity ? -1000 : finalGround) + currentHeight;
-                // 如果是在虛空，不能跳
-                canJump = (finalGround !== -Infinity); 
+                camera.position.y = finalGround + currentHeight;
+                canJump = true;
             }
         } else {
-            canJump = false; // 在空中不能跳
+            canJump = false;
+        }
+
+        // --- 重生機制 (Respawn) ---
+        if (camera.position.y < -30) {
+            camera.position.set(0, 5, 0); // 回到起點上方
+            velocity.set(0, 0, 0);       // 動量歸零
         }
         
         prevT = t;
