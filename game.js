@@ -37,7 +37,6 @@ const velocity = new THREE.Vector3();
 const playerRadius = 0.3;
 let currentHeight = 1.7;
 
-// 修正 Shift 監聽：直接監聽 keydown 事件的 shiftKey 屬性
 document.addEventListener('keydown', (e) => {
     if (e.code === 'KeyW') moveF = true; if (e.code === 'KeyS') moveB = true;
     if (e.code === 'KeyA') moveL = true; if (e.code === 'KeyD') moveR = true;
@@ -77,8 +76,7 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
 
-        // 1. 視角高度強行平滑同步
-        const targetH = isCrouching ? 1.2 : 1.7; // 蹲下更有感
+        const targetH = isCrouching ? 1.3 : 1.7;
         currentHeight += (targetH - currentHeight) * 0.2;
 
         velocity.x -= velocity.x * 10 * dt;
@@ -98,7 +96,7 @@ function animate() {
 
         if (moveDir.length() > 0) {
             moveDir.normalize();
-            let speed = (isCrouching && canJump) ? 22 : 60;
+            let speed = (isCrouching && canJump) ? 25 : 60; 
             velocity.x += moveDir.x * speed * dt;
             velocity.z += moveDir.z * speed * dt;
         }
@@ -107,34 +105,51 @@ function animate() {
         const oldZ = camera.position.z;
         const feetY = camera.position.y - currentHeight;
 
-        // 2. 取得移動前的支撐狀態
-        const preGroundH = getGroundAt(oldX, oldZ, blocks, playerRadius, feetY);
-
-        // 3. 分軸移動與「全足跡」檢查
+        // 核心：分離 X 軸與 Z 軸的潛行判定
+        
+        // --- 處理 X 軸 ---
         const nextX = oldX + velocity.x * dt;
         let canMoveX = !checkWall(nextX, camera.position.y, oldZ, blocks, playerRadius);
-        if (isCrouching && canJump && canMoveX) {
-            // 如果 X 移動後，整個足跡範圍內都找不到任何地面，則封鎖 X 移動
-            if (getGroundAt(nextX, oldZ, blocks, playerRadius, feetY) === -Infinity) canMoveX = false;
+        
+        if (canMoveX) {
+            if (isCrouching && canJump) {
+                // 如果移動後腳下沒方塊
+                if (getGroundAt(nextX, oldZ, blocks, playerRadius, feetY) === -Infinity) {
+                    // 尋找最近的方塊邊界，把玩家拉回去
+                    // 這邊用一個簡單暴力但有效的方法：直接退回上一步
+                    camera.position.x = oldX;
+                    velocity.x = 0;
+                } else {
+                    camera.position.x = nextX;
+                }
+            } else {
+                camera.position.x = nextX;
+            }
+        } else {
+            velocity.x = 0;
         }
-        if (canMoveX) camera.position.x = nextX;
 
+        // --- 處理 Z 軸 ---
         const nextZ = oldZ + velocity.z * dt;
         let canMoveZ = !checkWall(camera.position.x, camera.position.y, nextZ, blocks, playerRadius);
-        if (isCrouching && canJump && canMoveZ) {
-            if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius, feetY) === -Infinity) canMoveZ = false;
-        }
-        if (canMoveZ) camera.position.z = nextZ;
 
-        // 4. 潛行站立安全回彈
-        if (!isCrouching && canJump) {
-            if (getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, feetY) === -Infinity) {
-                camera.position.x = oldX;
-                camera.position.z = oldZ;
+        if (canMoveZ) {
+            if (isCrouching && canJump) {
+                if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius, feetY) === -Infinity) {
+                    // 同樣退回上一步
+                    camera.position.z = oldZ;
+                    velocity.z = 0;
+                } else {
+                    camera.position.z = nextZ;
+                }
+            } else {
+                camera.position.z = nextZ;
             }
+        } else {
+            velocity.z = 0;
         }
 
-        // 5. 垂直位移
+        // 垂直位移與真實落地
         camera.position.y += velocity.y * dt;
         const finalGround = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, camera.position.y - currentHeight);
 
@@ -148,8 +163,8 @@ function animate() {
             canJump = false;
         }
 
-        // 6. 重生判定 (掉到 -20 就傳送回來)
-        if (camera.position.y < -20) {
+        // 重生機制
+        if (camera.position.y < -30) {
             camera.position.set(0, 5, 0);
             velocity.set(0, 0, 0);
         }
