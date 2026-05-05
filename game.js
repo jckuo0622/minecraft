@@ -6,11 +6,10 @@ import { getGroundAt, checkWall } from './physics.js';
 // --- A. 初始化 ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xbfd1e5);
-scene.fog = new THREE.FogExp2(0xbfd1e5, 0.03); // 霧氣稍微調淡，可以看到更遠的山
+scene.fog = new THREE.FogExp2(0xbfd1e5, 0.03); 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(1);
 document.getElementById('game-container').appendChild(renderer.domElement);
 const controls = new PointerLockControls(camera, document.body);
 const overlay = document.getElementById('overlay');
@@ -136,19 +135,52 @@ function processQueue() {
 
 // --- C. UI ---
 const hotbar = document.createElement('div');
-hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:5px; background:rgba(0,0,0,0.6); padding:5px; border:2px solid #333; display:none;`;
+hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:10px; background:rgba(0,0,0,0.7); padding:10px; border:4px solid #333; display:none; border-radius:8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);`;
 document.body.appendChild(hotbar);
+
 const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand'];
 const slots = [];
-for (let i = 0; i < 5; i++) {
+
+blockTypes.forEach((type, i) => {
     const slot = document.createElement('div');
-    slot.style.cssText = `width:50px; height:50px; border:2px solid #8b8b8b; background:#555; display:flex; align-items:center; justify-content:center; color:white; font-size:12px;`;
-    slot.innerHTML = i + 1;
+    slot.style.cssText = `width:60px; height:60px; border:3px solid #8b8b8b; background:#555; display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative; overflow:hidden;`;
+    
+    // 建立圖示容器
+    const icon = document.createElement('div');
+    const colors = blockIconColors[type];
+    const canvas = getPixelCanvas(colors[0], colors[1]);
+    icon.style.width = '32px';
+    icon.style.height = '32px';
+    icon.style.backgroundImage = `url(${canvas.toDataURL()})`; // 將畫布轉為 Base64 圖片
+    icon.style.backgroundSize = 'cover';
+    icon.style.imageRendering = 'pixelated'; // 保持像素銳利
+    icon.style.marginBottom = '4px';
+
+    // 顯示數字
+    const label = document.createElement('span');
+    label.style.cssText = `color:white; font-size:12px; font-family:monospace; text-shadow:1px 1px 2px black;`;
+    label.innerText = i + 1;
+
+    slot.appendChild(icon);
+    slot.appendChild(label);
     hotbar.appendChild(slot);
     slots.push(slot);
+});
+
+function updateSelection(idx) {
+    slots.forEach((s, i) => {
+        if (i === idx) {
+            s.style.border = '4px solid #fff';
+            s.style.backgroundColor = '#777';
+            s.style.transform = 'scale(1.1)'; // 選中時稍微放大
+        } else {
+            s.style.border = '3px solid #8b8b8b';
+            s.style.backgroundColor = '#555';
+            s.style.transform = 'scale(1)';
+        }
+    });
 }
-function updateSelection(idx) { slots.forEach((s, i) => s.style.border = (i === idx) ? '4px solid white' : '2px solid #8b8b8b'); }
-updateSelection(0);
+updateSelection(0)
 
 document.getElementById('btn-play').addEventListener('click', () => controls.lock());
 controls.addEventListener('lock', () => { overlay.style.display = 'none'; crosshair.style.display = 'block'; hotbar.style.display = 'flex'; });

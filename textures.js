@@ -1,6 +1,7 @@
 import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
 
-export function createPixelTexture(c1, c2) {
+// 核心繪圖邏輯：回傳一個畫好像素的 Canvas
+export function getPixelCanvas(c1, c2) {
     const canvas = document.createElement('canvas');
     canvas.width = 16; canvas.height = 16;
     const ctx = canvas.getContext('2d');
@@ -8,6 +9,11 @@ export function createPixelTexture(c1, c2) {
         ctx.fillStyle = Math.random() > 0.5 ? c1 : c2;
         ctx.fillRect(x,y,1,1);
     }
+    return canvas;
+}
+
+export function createPixelTexture(c1, c2) {
+    const canvas = getPixelCanvas(c1, c2);
     const tex = new THREE.CanvasTexture(canvas);
     tex.magFilter = THREE.NearestFilter;
     return tex;
@@ -15,17 +21,14 @@ export function createPixelTexture(c1, c2) {
 
 export function getMaterials(type) {
     if (type === 'stone') {
-        const stone = createPixelTexture('#888888', '#777777');
-        return new Array(6).fill(new THREE.MeshLambertMaterial({map: stone}));
+        return new Array(6).fill(new THREE.MeshLambertMaterial({map: createPixelTexture('#888888', '#777777')}));
     } 
     else if (type === 'sand') {
-        // 新增：黃色系的像素質感
-        const sand = createPixelTexture('#e2c693', '#d1b47e');
-        return new Array(6).fill(new THREE.MeshLambertMaterial({map: sand}));
+        return new Array(6).fill(new THREE.MeshLambertMaterial({map: createPixelTexture('#e2c693', '#d1b47e')}));
     }
     else if (type === 'wood') {
-        const top = createPixelTexture('#6b4226', '#5d3a21');
         const side = createPixelTexture('#4d2d18', '#3e2413');
+        const top = createPixelTexture('#6b4226', '#5d3a21');
         return [
             new THREE.MeshLambertMaterial({map: side}), new THREE.MeshLambertMaterial({map: side}),
             new THREE.MeshLambertMaterial({map: top}),  new THREE.MeshLambertMaterial({map: top}),
@@ -33,8 +36,7 @@ export function getMaterials(type) {
         ];
     } 
     else if (type === 'leaf') {
-        const leaf = createPixelTexture('#2d5a27', '#3d7a33');
-        return new Array(6).fill(new THREE.MeshLambertMaterial({map: leaf, transparent: true, opacity: 0.9}));
+        return new Array(6).fill(new THREE.MeshLambertMaterial({map: createPixelTexture('#2d5a27', '#3d7a33'), transparent: true, opacity: 0.9}));
     }
     else { // grass
         const grassTop = createPixelTexture('#5dad44', '#77bc43');
@@ -46,3 +48,12 @@ export function getMaterials(type) {
         ];
     }
 }
+
+// 新增：專門給 UI 使用的圖示顏色清單
+export const blockIconColors = {
+    grass: ['#5dad44', '#77bc43'],
+    stone: ['#888888', '#777777'],
+    wood: ['#4d2d18', '#3e2413'],
+    leaf: ['#2d5a27', '#3d7a33'],
+    sand: ['#e2c693', '#d1b47e']
+};
