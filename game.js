@@ -2,6 +2,82 @@ import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
 import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/PointerLockControls.js';
 import { getMaterials, getPixelCanvas, blockIconColors } from './textures.js';
 import { getGroundAt, checkWall } from './physics.js';
+import { BlockItem, Inventory, CraftingRecipe, CraftingManager } from './inventory.js';
+
+
+const itemDefs = {
+    wood: new BlockItem('wood', '木頭'),
+    sand: new BlockItem('sand', '沙子'),
+    leaf: new BlockItem('leaf', '樹葉'),
+    stone: new BlockItem('stone', '石頭'),
+    plank: new BlockItem('plank', '木板'),
+    stone_axe: new BlockItem('stone_axe', '石斧'),
+    rope: new BlockItem('rope', '草繩'),
+    sandstone: new BlockItem('sandstone', '砂岩')
+};
+
+const inventory = new Inventory();
+const craftingManager = new CraftingManager(inventory);
+craftingManager.addRecipe(new CraftingRecipe('plank_recipe', '木頭 x1 → 木板 x4', [{ itemId: 'wood', amount: 1 }], { itemId: 'plank', amount: 4 }));
+craftingManager.addRecipe(new CraftingRecipe('axe_recipe', '石頭 x2 + 木頭 x1 → 石斧 x1', [{ itemId: 'stone', amount: 2 }, { itemId: 'wood', amount: 1 }], { itemId: 'stone_axe', amount: 1 }));
+craftingManager.addRecipe(new CraftingRecipe('rope_recipe', '樹葉 x2 → 草繩 x1', [{ itemId: 'leaf', amount: 2 }], { itemId: 'rope', amount: 1 }));
+craftingManager.addRecipe(new CraftingRecipe('sandstone_recipe', '沙子 x2 + 石頭 x1 → 砂岩 x1', [{ itemId: 'sand', amount: 2 }, { itemId: 'stone', amount: 1 }], { itemId: 'sandstone', amount: 1 }));
+
+const inventoryPanel = document.getElementById('inventory-panel');
+const inventoryList = document.getElementById('inventory-list');
+const craftingList = document.getElementById('crafting-list');
+const craftingMessage = document.getElementById('crafting-message');
+let inventoryOpen = false;
+
+function setCraftMessage(msg) {
+    craftingMessage.textContent = msg;
+}
+
+function renderInventory() {
+    const items = inventory.entries();
+    if (items.length === 0) {
+        inventoryList.innerHTML = '<div>目前沒有物品</div>';
+    } else {
+        inventoryList.innerHTML = items
+            .map(([id, count]) => `<div>${itemDefs[id]?.nameZh || id} x ${count}</div>`)
+            .join('');
+    }
+}
+
+function renderCrafting() {
+    craftingList.innerHTML = '';
+    craftingManager.recipes.forEach((recipe) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:10px;';
+
+        const label = document.createElement('span');
+        label.textContent = recipe.label;
+
+        const btn = document.createElement('button');
+        btn.textContent = '合成';
+        btn.disabled = !craftingManager.canCraft(recipe);
+        btn.addEventListener('click', () => {
+            const result = craftingManager.craft(recipe);
+            setCraftMessage(result.message);
+            renderInventory();
+            renderCrafting();
+        });
+
+        row.appendChild(label);
+        row.appendChild(btn);
+        craftingList.appendChild(row);
+    });
+}
+
+function toggleInventory() {
+    inventoryOpen = !inventoryOpen;
+    inventoryPanel.style.display = inventoryOpen ? 'block' : 'none';
+    if (inventoryOpen) {
+        renderInventory();
+        renderCrafting();
+        setCraftMessage('');
+    }
+}
 
 // --- A. 基礎場景設定 ---
 const scene = new THREE.Scene();
@@ -111,6 +187,7 @@ function updateNeighbors(x, y, z) {
 
         if (!exists) {
             const m = new THREE.Mesh(boxGeo, getMaterials('stone'));
+            m.userData.blockType = 'stone';
             m.position.set(nx, ny, nz);
             addBlockMesh(m);
         }
@@ -144,6 +221,7 @@ function flushChunkBuildQueue(maxChunksPerFrame = 1) {
         const chunkBlocks = [];
         for (const data of blockData) {
             const m = new THREE.Mesh(boxGeo, getMaterials(data.type));
+            m.userData.blockType = data.type;
             m.position.set(data.x, data.y, data.z);
             addBlockMesh(m);
             chunkBlocks.push(m);
@@ -244,6 +322,10 @@ document.addEventListener('keydown', (e) => {
         const val = parseInt(e.code.replace('Digit', '')) - 1;
         if (val >= 0 && val < 5) { selectedIdx = val; updateSelection(val); }
     }
+    if (e.code === 'KeyE') {
+        toggleInventory();
+        return;
+    }
     if (e.code === 'Space' && canJump) { velocity.y += 9.5; canJump = false; }
     if (e.shiftKey) isCrouching = true;
 });
@@ -268,10 +350,14 @@ window.addEventListener('mousedown', (e) => {
         const pos = intersect.object.position.clone();
         if (e.button === 0) { // 挖掘
             removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
+            const blockType = intersect.object.userData.blockType || 'stone';
+            inventory.add(blockType, 1);
+            if (inventoryOpen) { renderInventory(); renderCrafting(); }
             removeBlockMesh(intersect.object);
             updateNeighbors(pos.x, pos.y, pos.z);
         } else if (e.button === 2) { // 建造
             const b = new THREE.Mesh(boxGeo, getMaterials(blockTypes[selectedIdx]));
+            b.userData.blockType = blockTypes[selectedIdx];
             const placePos = pos.add(intersect.face.normal);
             b.position.copy(placePos);
             removedBlocks.delete(`${placePos.x},${placePos.y},${placePos.z}`);
