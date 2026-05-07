@@ -187,14 +187,14 @@ function toggleInventory() {
             unlockingForInventory = true;
             controls.unlock(); // 開背包時解鎖游標
         }
-        inventoryPanel.style.display = 'flex';
+        inventoryPanel.classList.add('open');
         renderInventory();
         renderCrafting();
         renderHotbar();
         renderQuickCraft();
         setCraftMessage('');
     } else {
-        inventoryPanel.style.display = 'none';
+        inventoryPanel.classList.remove('open');
         if (openedInventoryFromLock) {
             controls.lock(); // 關背包時回到遊戲鎖定
         }

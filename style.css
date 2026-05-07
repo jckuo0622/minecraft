@@ -81,3 +81,6 @@ body { margin: 0; overflow: hidden; background-color: #000; }
 .quick-craft-item{display:flex;align-items:center;justify-content:space-between;background:#9d9d9d;border:1px solid #666;padding:4px;}
 .quick-craft-item button{font-family:inherit;border:1px solid #333;background:#d8d8d8;cursor:pointer;padding:2px 6px;}
 .quick-craft-item button:disabled{opacity:.5;cursor:not-allowed;}
+
+#inventory-panel{display:none !important;}
+#inventory-panel.open{display:flex !important;}
