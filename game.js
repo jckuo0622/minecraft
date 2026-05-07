@@ -433,6 +433,10 @@ document.addEventListener('keydown', (e) => {
         toggleInventory();
         return;
     }
+    if (e.code === 'KeyE') {
+        toggleInventory();
+        return;
+    }
     if (e.code === 'Space' && canJump) { velocity.y += 9.5; canJump = false; }
     if (e.shiftKey) isCrouching = true;
 });
