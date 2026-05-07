@@ -25,18 +25,15 @@ const loadedChunks = new Map();
 const blocks = []; 
 const removedBlocks = new Set(); // 儲存被挖掉的座標 "x,y,z"
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+const worldWorker = new Worker('./worldWorker.js', { type: 'module' });
+const pendingChunks = new Set();
+const chunkBuildQueue = [];
 
-// 核心：多層次隨機地形 (FBM 模擬)
-function getNoiseHeight(x, z) {
+function getSurfaceHeightApprox(x, z) {
     let mountain = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 5;
     let hills = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 2;
     let detail = Math.sin(x * 0.4) * Math.cos(z * 0.4) * 0.5;
     return Math.round(mountain + hills + detail);
-}
-
-// 生態系雜訊：判定沙漠
-function getBiomeNoise(x, z) {
-    return Math.sin(x * 0.015) + Math.cos(z * 0.015);
 }
 
 // 核心：補洞邏輯
@@ -52,7 +49,7 @@ function updateNeighbors(x, y, z) {
         const posKey = `${nx},${ny},${nz}`;
 
         if (removedBlocks.has(posKey)) return; // 挖掉的地方不補
-        if (ny > getNoiseHeight(nx, nz) || ny < -20) return; // 限制高度與地底深度
+        if (ny > getSurfaceHeightApprox(nx, nz) || ny < -20) return; // 限制高度與地底深度
 
         const exists = blocks.some(b => 
             Math.abs(b.position.x - nx) < 0.1 && 
@@ -69,57 +66,40 @@ function updateNeighbors(x, y, z) {
     });
 }
 
-// 生成區塊
+// 生成區塊（改為由 Worker 負責地圖資料計算）
 function spawnChunk(cx, cz) {
     const key = `${cx},${cz}`;
-    if (loadedChunks.has(key)) return;
-    const chunkBlocks = [];
+    if (loadedChunks.has(key) || pendingChunks.has(key)) return;
+    pendingChunks.add(key);
+    worldWorker.postMessage({
+        type: 'generate_chunk',
+        cx,
+        cz,
+        removedBlocks: Array.from(removedBlocks)
+    });
+}
 
-    for (let x = 0; x < CHUNK_SIZE; x++) {
-        for (let z = 0; z < CHUNK_SIZE; z++) {
-            const wx = cx * CHUNK_SIZE + x;
-            const wz = cz * CHUNK_SIZE + z;
-            const h = getNoiseHeight(wx, wz);
-            const biomeVal = getBiomeNoise(wx, wz);
-            const isDesert = biomeVal > 0.6;
+worldWorker.onmessage = (event) => {
+    const { type, key, blocks: blockData } = event.data;
+    if (type !== 'chunk_generated') return;
+    pendingChunks.delete(key);
+    chunkBuildQueue.push({ key, blockData });
+};
 
-            if (!removedBlocks.has(`${wx},${h},${wz}`)) {
-                const type = isDesert ? 'sand' : 'grass';
-                const m = new THREE.Mesh(boxGeo, getMaterials(type));
-                m.position.set(wx, h, wz);
-                scene.add(m);
-                blocks.push(m);
-                chunkBlocks.push(m);
-
-                // 樹木生成 (僅限非沙漠且隨機機率)
-                if (!isDesert && h >= 0 && Math.random() < 0.015) {
-                    const treeH = 3 + Math.floor(Math.random() * 2);
-                    // 樹幹
-                    for (let ty = 1; ty <= treeH; ty++) {
-                        const wood = new THREE.Mesh(boxGeo, getMaterials('wood'));
-                        wood.position.set(wx, h + ty, wz);
-                        scene.add(wood);
-                        blocks.push(wood);
-                        chunkBlocks.push(wood);
-                    }
-                    // 樹葉
-                    for (let lx = -1; lx <= 1; lx++) {
-                        for (let lz = -1; lz <= 1; lz++) {
-                            for (let ly = 0; ly < 2; ly++) {
-                                if (Math.abs(lx) + Math.abs(lz) === 2 && Math.random() > 0.5) continue;
-                                const leaf = new THREE.Mesh(boxGeo, getMaterials('leaf'));
-                                leaf.position.set(wx + lx, h + treeH + ly + 1, wz + lz);
-                                scene.add(leaf);
-                                blocks.push(leaf);
-                                chunkBlocks.push(leaf);
-                            }
-                        }
-                    }
-                }
-            }
+function flushChunkBuildQueue(maxChunksPerFrame = 1) {
+    for (let i = 0; i < maxChunksPerFrame && chunkBuildQueue.length > 0; i++) {
+        const { key, blockData } = chunkBuildQueue.shift();
+        if (loadedChunks.has(key)) continue;
+        const chunkBlocks = [];
+        for (const data of blockData) {
+            const m = new THREE.Mesh(boxGeo, getMaterials(data.type));
+            m.position.set(data.x, data.y, data.z);
+            scene.add(m);
+            blocks.push(m);
+            chunkBlocks.push(m);
         }
+        loadedChunks.set(key, chunkBlocks);
     }
-    loadedChunks.set(key, chunkBlocks);
 }
 
 const generationQueue = [];
@@ -267,6 +247,7 @@ function animate() {
     if (controls.isLocked) {
         updateWorld();
         processQueue();
+        flushChunkBuildQueue();
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
         prevT = t;
