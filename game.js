@@ -1,6 +1,6 @@
 import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
 import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/PointerLockControls.js';
-import { getMaterials, getPixelCanvas, blockIconColors } from './textures.js';
+import { getMaterials, getPixelCanvas, blockIconColors, getItemIconCanvas } from './textures.js';
 import { getGroundAt, checkWall } from './physics.js';
 import { BlockItem, Inventory, CraftingRecipe, CraftingManager } from './inventory.js';
 
@@ -19,7 +19,7 @@ const itemDefs = {
 const itemIconDataUrl = {};
 Object.keys(blockIconColors).forEach((id) => {
     const colors = blockIconColors[id];
-    const cv = getPixelCanvas(colors[0], colors[1]);
+    const cv = getItemIconCanvas(id);
     itemIconDataUrl[id] = cv.toDataURL();
 });
 

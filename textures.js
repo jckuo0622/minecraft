@@ -79,6 +79,30 @@ export function getMaterials(type) {
     return materials;
 }
 
+
+export function getItemIconCanvas(type) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 16; canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+
+    if (type === 'stone_axe') {
+        // 石斧頭
+        ctx.fillStyle = '#9fa5ad';
+        ctx.fillRect(8, 2, 6, 5);
+        ctx.fillStyle = '#838b95';
+        ctx.fillRect(7, 3, 4, 4);
+        // 木柄
+        ctx.fillStyle = '#7a4e25';
+        ctx.fillRect(5, 7, 2, 8);
+        ctx.fillStyle = '#8b5a2b';
+        ctx.fillRect(6, 7, 1, 8);
+        return canvas;
+    }
+
+    const colors = blockIconColors[type] || ['#ffffff', '#dddddd'];
+    return getPixelCanvas(colors[0], colors[1]);
+}
+
 // 新增：專門給 UI 使用的圖示顏色清單
 export const blockIconColors = {
     grass: ['#5dad44', '#77bc43'],
