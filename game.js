@@ -2,6 +2,82 @@ import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
 import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/PointerLockControls.js';
 import { getMaterials, getPixelCanvas, blockIconColors } from './textures.js';
 import { getGroundAt, checkWall } from './physics.js';
+import { BlockItem, Inventory, CraftingRecipe, CraftingManager } from './inventory.js';
+
+
+const itemDefs = {
+    wood: new BlockItem('wood', '木頭'),
+    sand: new BlockItem('sand', '沙子'),
+    leaf: new BlockItem('leaf', '樹葉'),
+    stone: new BlockItem('stone', '石頭'),
+    plank: new BlockItem('plank', '木板'),
+    stone_axe: new BlockItem('stone_axe', '石斧'),
+    rope: new BlockItem('rope', '草繩'),
+    sandstone: new BlockItem('sandstone', '砂岩')
+};
+
+const inventory = new Inventory();
+const craftingManager = new CraftingManager(inventory);
+craftingManager.addRecipe(new CraftingRecipe('plank_recipe', '木頭 x1 → 木板 x4', [{ itemId: 'wood', amount: 1 }], { itemId: 'plank', amount: 4 }));
+craftingManager.addRecipe(new CraftingRecipe('axe_recipe', '石頭 x2 + 木頭 x1 → 石斧 x1', [{ itemId: 'stone', amount: 2 }, { itemId: 'wood', amount: 1 }], { itemId: 'stone_axe', amount: 1 }));
+craftingManager.addRecipe(new CraftingRecipe('rope_recipe', '樹葉 x2 → 草繩 x1', [{ itemId: 'leaf', amount: 2 }], { itemId: 'rope', amount: 1 }));
+craftingManager.addRecipe(new CraftingRecipe('sandstone_recipe', '沙子 x2 + 石頭 x1 → 砂岩 x1', [{ itemId: 'sand', amount: 2 }, { itemId: 'stone', amount: 1 }], { itemId: 'sandstone', amount: 1 }));
+
+const inventoryPanel = document.getElementById('inventory-panel');
+const inventoryList = document.getElementById('inventory-list');
+const craftingList = document.getElementById('crafting-list');
+const craftingMessage = document.getElementById('crafting-message');
+let inventoryOpen = false;
+
+function setCraftMessage(msg) {
+    craftingMessage.textContent = msg;
+}
+
+function renderInventory() {
+    const items = inventory.entries();
+    if (items.length === 0) {
+        inventoryList.innerHTML = '<div>目前沒有物品</div>';
+    } else {
+        inventoryList.innerHTML = items
+            .map(([id, count]) => `<div>${itemDefs[id]?.nameZh || id} x ${count}</div>`)
+            .join('');
+    }
+}
+
+function renderCrafting() {
+    craftingList.innerHTML = '';
+    craftingManager.recipes.forEach((recipe) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:10px;';
+
+        const label = document.createElement('span');
+        label.textContent = recipe.label;
+
+        const btn = document.createElement('button');
+        btn.textContent = '合成';
+        btn.disabled = !craftingManager.canCraft(recipe);
+        btn.addEventListener('click', () => {
+            const result = craftingManager.craft(recipe);
+            setCraftMessage(result.message);
+            renderInventory();
+            renderCrafting();
+        });
+
+        row.appendChild(label);
+        row.appendChild(btn);
+        craftingList.appendChild(row);
+    });
+}
+
+function toggleInventory() {
+    inventoryOpen = !inventoryOpen;
+    inventoryPanel.style.display = inventoryOpen ? 'block' : 'none';
+    if (inventoryOpen) {
+        renderInventory();
+        renderCrafting();
+        setCraftMessage('');
+    }
+}
 
 // --- A. 基礎場景設定 ---
 const scene = new THREE.Scene();
@@ -23,20 +99,73 @@ const CHUNK_SIZE = 16;
 const RENDER_DISTANCE = 2;
 const loadedChunks = new Map();
 const blocks = []; 
+const blockByPos = new Map();
+const columnIndex = new Map();
 const removedBlocks = new Set(); // 儲存被挖掉的座標 "x,y,z"
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+const worldWorker = new Worker('./worldWorker.js', { type: 'module' });
+const pendingChunks = new Set();
+const chunkBuildQueue = [];
 
-// 核心：多層次隨機地形 (FBM 模擬)
-function getNoiseHeight(x, z) {
+function posKey(x, y, z) { return `${x},${y},${z}`; }
+function colKey(x, z) { return `${x},${z}`; }
+
+function addBlockMesh(mesh) {
+    const x = Math.round(mesh.position.x);
+    const y = Math.round(mesh.position.y);
+    const z = Math.round(mesh.position.z);
+    const pKey = posKey(x, y, z);
+    if (blockByPos.has(pKey)) return false;
+
+    scene.add(mesh);
+    blocks.push(mesh);
+    blockByPos.set(pKey, mesh);
+
+    const cKey = colKey(x, z);
+    if (!columnIndex.has(cKey)) columnIndex.set(cKey, new Set());
+    columnIndex.get(cKey).add(mesh);
+    return true;
+}
+
+function removeBlockMesh(mesh) {
+    const x = Math.round(mesh.position.x);
+    const y = Math.round(mesh.position.y);
+    const z = Math.round(mesh.position.z);
+    const pKey = posKey(x, y, z);
+
+    scene.remove(mesh);
+    const idx = blocks.indexOf(mesh);
+    if (idx > -1) blocks.splice(idx, 1);
+    blockByPos.delete(pKey);
+
+    const cKey = colKey(x, z);
+    const col = columnIndex.get(cKey);
+    if (col) {
+        col.delete(mesh);
+        if (col.size === 0) columnIndex.delete(cKey);
+    }
+}
+
+function getNearbyBlocks(x, z, radius = 2) {
+    const cx = Math.round(x);
+    const cz = Math.round(z);
+    const nearby = [];
+    for (let dx = -radius; dx <= radius; dx++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+            const col = columnIndex.get(colKey(cx + dx, cz + dz));
+            if (!col) continue;
+            nearby.push(...col);
+        }
+    }
+    return nearby;
+}
+
+
+function getSurfaceHeightApprox(x, z) {
     let mountain = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 5;
     let hills = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 2;
     let detail = Math.sin(x * 0.4) * Math.cos(z * 0.4) * 0.5;
     return Math.round(mountain + hills + detail);
-}
-
-// 生態系雜訊：判定沙漠
-function getBiomeNoise(x, z) {
-    return Math.sin(x * 0.015) + Math.cos(z * 0.015);
 }
 
 // 核心：補洞邏輯
@@ -49,77 +178,56 @@ function updateNeighbors(x, y, z) {
 
     directions.forEach(([dx, dy, dz]) => {
         const nx = x + dx, ny = y + dy, nz = z + dz;
-        const posKey = `${nx},${ny},${nz}`;
+        const neighborKey = `${nx},${ny},${nz}`;
 
-        if (removedBlocks.has(posKey)) return; // 挖掉的地方不補
-        if (ny > getNoiseHeight(nx, nz) || ny < -20) return; // 限制高度與地底深度
+        if (removedBlocks.has(neighborKey)) return; // 挖掉的地方不補
+        if (ny > getSurfaceHeightApprox(nx, nz) || ny < -20) return; // 限制高度與地底深度
 
-        const exists = blocks.some(b => 
-            Math.abs(b.position.x - nx) < 0.1 && 
-            Math.abs(b.position.y - ny) < 0.1 && 
-            Math.abs(b.position.z - nz) < 0.1
-        );
+        const exists = blockByPos.has(posKey(nx, ny, nz));
 
         if (!exists) {
             const m = new THREE.Mesh(boxGeo, getMaterials('stone'));
+            m.userData.blockType = 'stone';
             m.position.set(nx, ny, nz);
-            scene.add(m);
-            blocks.push(m);
+            addBlockMesh(m);
         }
     });
 }
 
-// 生成區塊
+// 生成區塊（改為由 Worker 負責地圖資料計算）
 function spawnChunk(cx, cz) {
     const key = `${cx},${cz}`;
-    if (loadedChunks.has(key)) return;
-    const chunkBlocks = [];
+    if (loadedChunks.has(key) || pendingChunks.has(key)) return;
+    pendingChunks.add(key);
+    worldWorker.postMessage({
+        type: 'generate_chunk',
+        cx,
+        cz,
+        removedBlocks: Array.from(removedBlocks)
+    });
+}
 
-    for (let x = 0; x < CHUNK_SIZE; x++) {
-        for (let z = 0; z < CHUNK_SIZE; z++) {
-            const wx = cx * CHUNK_SIZE + x;
-            const wz = cz * CHUNK_SIZE + z;
-            const h = getNoiseHeight(wx, wz);
-            const biomeVal = getBiomeNoise(wx, wz);
-            const isDesert = biomeVal > 0.6;
+worldWorker.onmessage = (event) => {
+    const { type, key, blocks: blockData } = event.data;
+    if (type !== 'chunk_generated') return;
+    pendingChunks.delete(key);
+    chunkBuildQueue.push({ key, blockData });
+};
 
-            if (!removedBlocks.has(`${wx},${h},${wz}`)) {
-                const type = isDesert ? 'sand' : 'grass';
-                const m = new THREE.Mesh(boxGeo, getMaterials(type));
-                m.position.set(wx, h, wz);
-                scene.add(m);
-                blocks.push(m);
-                chunkBlocks.push(m);
-
-                // 樹木生成 (僅限非沙漠且隨機機率)
-                if (!isDesert && h >= 0 && Math.random() < 0.015) {
-                    const treeH = 3 + Math.floor(Math.random() * 2);
-                    // 樹幹
-                    for (let ty = 1; ty <= treeH; ty++) {
-                        const wood = new THREE.Mesh(boxGeo, getMaterials('wood'));
-                        wood.position.set(wx, h + ty, wz);
-                        scene.add(wood);
-                        blocks.push(wood);
-                        chunkBlocks.push(wood);
-                    }
-                    // 樹葉
-                    for (let lx = -1; lx <= 1; lx++) {
-                        for (let lz = -1; lz <= 1; lz++) {
-                            for (let ly = 0; ly < 2; ly++) {
-                                if (Math.abs(lx) + Math.abs(lz) === 2 && Math.random() > 0.5) continue;
-                                const leaf = new THREE.Mesh(boxGeo, getMaterials('leaf'));
-                                leaf.position.set(wx + lx, h + treeH + ly + 1, wz + lz);
-                                scene.add(leaf);
-                                blocks.push(leaf);
-                                chunkBlocks.push(leaf);
-                            }
-                        }
-                    }
-                }
-            }
+function flushChunkBuildQueue(maxChunksPerFrame = 1) {
+    for (let i = 0; i < maxChunksPerFrame && chunkBuildQueue.length > 0; i++) {
+        const { key, blockData } = chunkBuildQueue.shift();
+        if (loadedChunks.has(key)) continue;
+        const chunkBlocks = [];
+        for (const data of blockData) {
+            const m = new THREE.Mesh(boxGeo, getMaterials(data.type));
+            m.userData.blockType = data.type;
+            m.position.set(data.x, data.y, data.z);
+            addBlockMesh(m);
+            chunkBlocks.push(m);
         }
+        loadedChunks.set(key, chunkBlocks);
     }
-    loadedChunks.set(key, chunkBlocks);
 }
 
 const generationQueue = [];
@@ -136,9 +244,7 @@ function updateWorld() {
         const [cx, cz] = key.split(',').map(Number);
         if (Math.abs(cx - px) > RENDER_DISTANCE + 1 || Math.abs(cz - pz) > RENDER_DISTANCE + 1) {
             chunkBlocks.forEach(b => {
-                scene.remove(b);
-                const idx = blocks.indexOf(b);
-                if (idx > -1) blocks.splice(idx, 1);
+                removeBlockMesh(b);
             });
             loadedChunks.delete(key);
         }
@@ -216,6 +322,10 @@ document.addEventListener('keydown', (e) => {
         const val = parseInt(e.code.replace('Digit', '')) - 1;
         if (val >= 0 && val < 5) { selectedIdx = val; updateSelection(val); }
     }
+    if (e.code === 'KeyE') {
+        toggleInventory();
+        return;
+    }
     if (e.code === 'Space' && canJump) { velocity.y += 9.5; canJump = false; }
     if (e.shiftKey) isCrouching = true;
 });
@@ -233,22 +343,25 @@ window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-    const intersects = raycaster.intersectObjects(blocks);
+    const interactableBlocks = getNearbyBlocks(camera.position.x, camera.position.z, 4);
+    const intersects = raycaster.intersectObjects(interactableBlocks);
     if (intersects.length > 0) {
         const intersect = intersects[0];
         const pos = intersect.object.position.clone();
         if (e.button === 0) { // 挖掘
             removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
-            scene.remove(intersect.object);
-            const idx = blocks.indexOf(intersect.object);
-            if (idx > -1) blocks.splice(idx, 1);
+            const blockType = intersect.object.userData.blockType || 'stone';
+            inventory.add(blockType, 1);
+            if (inventoryOpen) { renderInventory(); renderCrafting(); }
+            removeBlockMesh(intersect.object);
             updateNeighbors(pos.x, pos.y, pos.z);
         } else if (e.button === 2) { // 建造
             const b = new THREE.Mesh(boxGeo, getMaterials(blockTypes[selectedIdx]));
+            b.userData.blockType = blockTypes[selectedIdx];
             const placePos = pos.add(intersect.face.normal);
             b.position.copy(placePos);
             removedBlocks.delete(`${placePos.x},${placePos.y},${placePos.z}`);
-            scene.add(b); blocks.push(b);
+            addBlockMesh(b);
         }
     }
 });
@@ -267,6 +380,7 @@ function animate() {
     if (controls.isLocked) {
         updateWorld();
         processQueue();
+        flushChunkBuildQueue();
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
         prevT = t;
@@ -277,7 +391,8 @@ function animate() {
         velocity.z -= velocity.z * 10 * dt;
         
         const feetY = camera.position.y - currentHeight;
-        const groundH = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, feetY);
+        const nearbyGroundBlocks = getNearbyBlocks(camera.position.x, camera.position.z);
+        const groundH = getGroundAt(camera.position.x, camera.position.z, nearbyGroundBlocks, playerRadius, feetY);
 
         if (groundH === -999) { velocity.y = 0; }
         else { velocity.y -= 28 * dt; }
@@ -299,12 +414,12 @@ function animate() {
         }
 
         const nextX = camera.position.x + velocity.x * dt;
-        if (!checkWall(nextX, camera.position.y, camera.position.z, blocks, playerRadius)) {
-            if (getGroundAt(nextX, camera.position.z, blocks, playerRadius, feetY) !== -999) camera.position.x = nextX;
+        if (!checkWall(nextX, camera.position.y, camera.position.z, nearbyGroundBlocks, playerRadius)) {
+            if (getGroundAt(nextX, camera.position.z, nearbyGroundBlocks, playerRadius, feetY) !== -999) camera.position.x = nextX;
         }
         const nextZ = camera.position.z + velocity.z * dt;
-        if (!checkWall(camera.position.x, camera.position.y, nextZ, blocks, playerRadius)) {
-            if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius, feetY) !== -999) camera.position.z = nextZ;
+        if (!checkWall(camera.position.x, camera.position.y, nextZ, nearbyGroundBlocks, playerRadius)) {
+            if (getGroundAt(camera.position.x, nextZ, nearbyGroundBlocks, playerRadius, feetY) !== -999) camera.position.z = nextZ;
         }
         camera.position.y += velocity.y * dt;
         if (groundH !== -999 && camera.position.y - currentHeight <= groundH) {
