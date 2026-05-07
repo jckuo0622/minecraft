@@ -71,6 +71,7 @@ function renderCrafting() {
             setCraftMessage(result.message);
             renderInventory();
             renderCrafting();
+            renderHotbar();
         });
 
         row.appendChild(label);
@@ -91,6 +92,7 @@ function toggleInventory() {
         inventoryPanel.style.display = 'flex';
         renderInventory();
         renderCrafting();
+        renderHotbar();
         setCraftMessage('');
     } else {
         inventoryPanel.style.display = 'none';
@@ -161,6 +163,7 @@ function updateDrops(dt) {
         const dz = drop.position.z - camera.position.z;
         if ((dx * dx + dy * dy + dz * dz) < 2.25) {
             inventory.add(drop.userData.itemId, 1);
+            renderHotbar();
             if (inventoryOpen) { renderInventory(); renderCrafting(); }
             scene.remove(drop);
             droppedItems.splice(i, 1);
@@ -322,42 +325,53 @@ function processQueue() {
 
 // --- C. 物品欄 UI (含圖示) ---
 const hotbar = document.createElement('div');
-hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:10px; background:rgba(0,0,0,0.7); padding:10px; border:4px solid #333; display:none; border-radius:8px;`;
+hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; flex-wrap:wrap; width:560px; gap:6px; background:rgba(0,0,0,0.7); padding:10px; border:4px solid #333; display:none; border-radius:8px;`;
 document.body.appendChild(hotbar);
 
 const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand'];
 const slots = [];
 
-blockTypes.forEach((type, i) => {
-    const slot = document.createElement('div');
-    slot.style.cssText = `width:60px; height:60px; border:3px solid #8b8b8b; background:#555; display:flex; flex-direction:column; align-items:center; justify-content:center; transition: transform 0.1s;`;
-    
-    const icon = document.createElement('div');
-    const colors = blockIconColors[type];
-    const canvas = getPixelCanvas(colors[0], colors[1]);
-    icon.style.width = '32px';
-    icon.style.height = '32px';
-    icon.style.backgroundImage = `url(${canvas.toDataURL()})`;
-    icon.style.backgroundSize = 'cover';
-    icon.style.imageRendering = 'pixelated';
-    icon.style.marginBottom = '2px';
+function renderHotbar() {
+    const entries = inventory.entries();
+    slots.forEach((slot, i) => {
+        const icon = slot.querySelector('.hb-icon');
+        const label = slot.querySelector('.hb-count');
+        const entry = entries[i];
+        if (!entry) {
+            icon.style.backgroundImage = '';
+            label.textContent = '';
+            return;
+        }
+        const [id, count] = entry;
+        icon.style.backgroundImage = `url(${itemIconDataUrl[id] || ''})`;
+        label.textContent = `x${count}`;
+    });
+}
 
-    const label = document.createElement('span');
-    label.style.cssText = `color:white; font-size:10px; font-family:monospace;`;
-    label.innerText = i + 1;
+for (let i = 0; i < 27; i++) {
+    const slot = document.createElement('div');
+    slot.style.cssText = `width:54px; height:54px; border:3px solid #8b8b8b; background:#555; position:relative;`;
+
+    const icon = document.createElement('div');
+    icon.className = 'hb-icon';
+    icon.style.cssText = 'position:absolute; left:9px; top:8px; width:32px; height:32px; background-size:cover; image-rendering:pixelated;';
+
+    const count = document.createElement('span');
+    count.className = 'hb-count';
+    count.style.cssText = 'position:absolute; right:4px; bottom:2px; color:white; font-size:10px; font-family:monospace;';
 
     slot.appendChild(icon);
-    slot.appendChild(label);
+    slot.appendChild(count);
     hotbar.appendChild(slot);
     slots.push(slot);
-});
+}
 
 function updateSelection(idx) {
     slots.forEach((s, i) => {
         if (i === idx) {
             s.style.border = '4px solid white';
             s.style.backgroundColor = '#777';
-            s.style.transform = 'scale(1.1)';
+            s.style.transform = 'scale(1.05)';
         } else {
             s.style.border = '3px solid #8b8b8b';
             s.style.backgroundColor = '#555';
@@ -365,6 +379,7 @@ function updateSelection(idx) {
         }
     });
 }
+renderHotbar();
 updateSelection(0);
 
 // --- D. 控制與點擊 ---
@@ -372,14 +387,14 @@ document.getElementById('btn-play').addEventListener('click', () => controls.loc
 controls.addEventListener('lock', () => {
     overlay.style.display = 'none';
     crosshair.style.display = inventoryOpen ? 'none' : 'block';
-    hotbar.style.display = inventoryOpen ? 'none' : 'flex';
+    hotbar.style.display = 'flex';
 });
 controls.addEventListener('unlock', () => {
     if (unlockingForInventory) {
         unlockingForInventory = false;
         overlay.style.display = 'none';
         crosshair.style.display = 'none';
-        hotbar.style.display = 'none';
+        hotbar.style.display = 'flex';
         return;
     }
     overlay.style.display = 'flex';
