@@ -35,6 +35,7 @@ const inventoryList = document.getElementById('inventory-list');
 const inventoryHotbarGrid = document.getElementById('inventory-hotbar-grid');
 const craftingMessage = document.getElementById('crafting-message');
 const craftResultEl = document.getElementById('craft-result');
+const quickCraftList = document.getElementById('quick-craft-list');
 let inventoryOpen = false;
 let openedInventoryFromLock = false;
 let unlockingForInventory = false;
@@ -67,6 +68,7 @@ function renderInventory() {
             inventory.moveSlot(from, to);
             renderInventory();
             renderHotbar();
+            renderQuickCraft();
         });
     });
 }
@@ -108,14 +110,16 @@ function renderCrafting() {
             inventory.remove(invSlot.itemId, 1);
             renderInventory();
             renderHotbar();
+            renderQuickCraft();
             renderCrafting();
+            renderQuickCraft();
         };
         el.onclick = () => {
             const c = craftSlots[idx];
             if (!c) return;
             inventory.add(c.itemId, c.count, false);
             craftSlots[idx] = null;
-            renderInventory(); renderHotbar(); renderCrafting();
+            renderInventory(); renderHotbar(); renderCrafting(); renderQuickCraft();
         };
     });
 
@@ -135,6 +139,45 @@ function renderCrafting() {
     };
 }
 
+
+function renderQuickCraft() {
+    quickCraftList.innerHTML = '';
+    craftingManager.recipes.forEach((recipe) => {
+        const row = document.createElement('div');
+        row.className = 'quick-craft-item';
+        const icon = document.createElement('div');
+        icon.className = 'mc-item-icon';
+        icon.style.position = 'static';
+        icon.style.width = '18px';
+        icon.style.height = '18px';
+        icon.style.backgroundImage = `url(${itemIconDataUrl[recipe.output.itemId] || ''})`;
+        const name = document.createElement('span');
+        name.textContent = `${itemDefs[recipe.output.itemId]?.nameZh || recipe.output.itemId} x${recipe.output.amount}`;
+        name.style.flex = '1';
+        name.style.marginLeft = '6px';
+        name.style.fontSize = '12px';
+
+        const btn = document.createElement('button');
+        btn.textContent = '合成';
+        btn.disabled = !craftingManager.canCraft(recipe);
+        btn.onclick = () => {
+            const result = craftingManager.craft(recipe);
+            setCraftMessage(result.message);
+            renderInventory(); renderHotbar(); renderCrafting(); renderQuickCraft(); renderQuickCraft();
+        };
+
+        const left = document.createElement('div');
+        left.style.display = 'flex';
+        left.style.alignItems = 'center';
+        left.appendChild(icon);
+        left.appendChild(name);
+
+        row.appendChild(left);
+        row.appendChild(btn);
+        quickCraftList.appendChild(row);
+    });
+}
+
 function toggleInventory() {
     inventoryOpen = !inventoryOpen;
 
@@ -148,6 +191,7 @@ function toggleInventory() {
         renderInventory();
         renderCrafting();
         renderHotbar();
+        renderQuickCraft();
         setCraftMessage('');
     } else {
         inventoryPanel.style.display = 'none';
@@ -508,6 +552,7 @@ window.addEventListener('mousedown', (e) => {
             inventory.remove(selectedSlot.itemId, 1);
             renderInventory();
             renderHotbar();
+            renderQuickCraft();
             const placePos = pos.add(intersect.face.normal);
             b.position.copy(placePos);
             removedBlocks.delete(`${placePos.x},${placePos.y},${placePos.z}`);
