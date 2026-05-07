@@ -53,6 +53,22 @@ export function getMaterials(type) {
         });
         materials = [mat, mat, mat, mat, mat, mat];
     }
+    else if (type === 'plank') {
+        const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#b88650', '#a57442') });
+        materials = [mat, mat, mat, mat, mat, mat];
+    }
+    else if (type === 'sandstone') {
+        const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#d4c08f', '#c6b27f') });
+        materials = [mat, mat, mat, mat, mat, mat];
+    }
+    else if (type === 'rope') {
+        const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#93a54f', '#839544') });
+        materials = [mat, mat, mat, mat, mat, mat];
+    }
+    else if (type === 'stone_axe') {
+        const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#9fa5ad', '#838b95') });
+        materials = [mat, mat, mat, mat, mat, mat];
+    }
     else { // grass
         const grassTop = new THREE.MeshLambertMaterial({ map: createPixelTexture('#5dad44', '#77bc43') });
         const dirtSide = new THREE.MeshLambertMaterial({ map: createPixelTexture('#8b5a2b', '#7a4e25') });
@@ -69,5 +85,9 @@ export const blockIconColors = {
     stone: ['#888888', '#777777'],
     wood: ['#4d2d18', '#3e2413'],
     leaf: ['#2d5a27', '#3d7a33'],
-    sand: ['#e2c693', '#d1b47e']
+    sand: ['#e2c693', '#d1b47e'],
+    plank: ['#b88650', '#a57442'],
+    sandstone: ['#d4c08f', '#c6b27f'],
+    rope: ['#93a54f', '#839544'],
+    stone_axe: ['#9fa5ad', '#838b95']
 };

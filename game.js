@@ -81,7 +81,7 @@ function toggleInventory() {
             unlockingForInventory = true;
             controls.unlock(); // 開背包時解鎖游標
         }
-        inventoryPanel.style.display = 'block';
+        inventoryPanel.style.display = 'flex';
         renderInventory();
         renderCrafting();
         setCraftMessage('');
@@ -121,6 +121,36 @@ const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const worldWorker = new Worker('./worldWorker.js', { type: 'module' });
 const pendingChunks = new Set();
 const chunkBuildQueue = [];
+const droppedItems = [];
+
+function spawnDrop(itemId, x, y, z) {
+    const drop = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), getMaterials(itemId));
+    drop.position.set(x, y + 0.6, z);
+    drop.userData.itemId = itemId;
+    drop.userData.vy = 0;
+    scene.add(drop);
+    droppedItems.push(drop);
+}
+
+function updateDrops(dt) {
+    for (let i = droppedItems.length - 1; i >= 0; i--) {
+        const drop = droppedItems[i];
+        drop.userData.vy -= 18 * dt;
+        drop.position.y += drop.userData.vy * dt;
+        if (drop.position.y < -20) drop.position.y = -20;
+
+        const dx = drop.position.x - camera.position.x;
+        const dy = (drop.position.y + 0.5) - (camera.position.y - currentHeight + 0.6);
+        const dz = drop.position.z - camera.position.z;
+        if ((dx * dx + dy * dy + dz * dz) < 2.25) {
+            inventory.add(drop.userData.itemId, 1);
+            if (inventoryOpen) { renderInventory(); renderCrafting(); }
+            scene.remove(drop);
+            droppedItems.splice(i, 1);
+        }
+    }
+}
+
 
 function posKey(x, y, z) { return `${x},${y},${z}`; }
 function colKey(x, z) { return `${x},${z}`; }
@@ -381,8 +411,7 @@ window.addEventListener('mousedown', (e) => {
         if (e.button === 0) { // 挖掘
             removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
             const blockType = intersect.object.userData.blockType || 'stone';
-            inventory.add(blockType, 1);
-            if (inventoryOpen) { renderInventory(); renderCrafting(); }
+            spawnDrop(blockType, pos.x, pos.y, pos.z);
             removeBlockMesh(intersect.object);
             updateNeighbors(pos.x, pos.y, pos.z);
         } else if (e.button === 2) { // 建造
@@ -414,6 +443,7 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
         prevT = t;
+        updateDrops(dt);
 
         const targetH = isCrouching ? 1.2 : 1.7;
         currentHeight += (targetH - currentHeight) * 0.2;
