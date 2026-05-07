@@ -344,7 +344,7 @@ const hotbar = document.createElement('div');
 hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; flex-wrap:nowrap; width:max-content; gap:6px; background:rgba(0,0,0,0.7); padding:10px; border:4px solid #333; display:none; border-radius:8px;`;
 document.body.appendChild(hotbar);
 
-const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand'];
+const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand', 'sandstone'];
 const slots = [];
 
 function renderHotbar() {

@@ -58,7 +58,7 @@ export function getMaterials(type) {
         materials = [mat, mat, mat, mat, mat, mat];
     }
     else if (type === 'sandstone') {
-        const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#d4c08f', '#c6b27f') });
+        const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#b9b3a3', '#9e9888') });
         materials = [mat, mat, mat, mat, mat, mat];
     }
     else if (type === 'rope') {
@@ -87,7 +87,7 @@ export const blockIconColors = {
     leaf: ['#2d5a27', '#3d7a33'],
     sand: ['#e2c693', '#d1b47e'],
     plank: ['#b88650', '#a57442'],
-    sandstone: ['#d4c08f', '#c6b27f'],
+    sandstone: ['#b9b3a3', '#9e9888'],
     rope: ['#93a54f', '#839544'],
     stone_axe: ['#9fa5ad', '#838b95']
 };
