@@ -28,6 +28,8 @@ const inventoryList = document.getElementById('inventory-list');
 const craftingList = document.getElementById('crafting-list');
 const craftingMessage = document.getElementById('crafting-message');
 let inventoryOpen = false;
+let openedInventoryFromLock = false;
+let unlockingForInventory = false;
 
 function setCraftMessage(msg) {
     craftingMessage.textContent = msg;
@@ -72,11 +74,23 @@ function renderCrafting() {
 
 function toggleInventory() {
     inventoryOpen = !inventoryOpen;
-    inventoryPanel.style.display = inventoryOpen ? 'block' : 'none';
+
     if (inventoryOpen) {
+        openedInventoryFromLock = controls.isLocked;
+        if (controls.isLocked) {
+            unlockingForInventory = true;
+            controls.unlock(); // 開背包時解鎖游標
+        }
+        inventoryPanel.style.display = 'block';
         renderInventory();
         renderCrafting();
         setCraftMessage('');
+    } else {
+        inventoryPanel.style.display = 'none';
+        if (openedInventoryFromLock) {
+            controls.lock(); // 關背包時回到遊戲鎖定
+        }
+        openedInventoryFromLock = false;
     }
 }
 
@@ -308,8 +322,23 @@ updateSelection(0);
 
 // --- D. 控制與點擊 ---
 document.getElementById('btn-play').addEventListener('click', () => controls.lock());
-controls.addEventListener('lock', () => { overlay.style.display = 'none'; crosshair.style.display = 'block'; hotbar.style.display = 'flex'; });
-controls.addEventListener('unlock', () => { overlay.style.display = 'flex'; crosshair.style.display = 'none'; hotbar.style.display = 'none'; });
+controls.addEventListener('lock', () => {
+    overlay.style.display = 'none';
+    crosshair.style.display = inventoryOpen ? 'none' : 'block';
+    hotbar.style.display = inventoryOpen ? 'none' : 'flex';
+});
+controls.addEventListener('unlock', () => {
+    if (unlockingForInventory) {
+        unlockingForInventory = false;
+        overlay.style.display = 'none';
+        crosshair.style.display = 'none';
+        hotbar.style.display = 'none';
+        return;
+    }
+    overlay.style.display = 'flex';
+    crosshair.style.display = 'none';
+    hotbar.style.display = 'none';
+});
 
 let selectedIdx = 0;
 const velocity = new THREE.Vector3();
