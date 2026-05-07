@@ -58,7 +58,7 @@ body { margin: 0; overflow: hidden; background-color: #000; }
 .mc-title{font-weight:700;color:#222;margin-bottom:6px;}
 .mc-craft-grid{display:grid;grid-template-columns:repeat(2,42px);gap:6px;}
 .slot{width:42px;height:42px;background:#8b8b8b;border:2px solid #333;box-shadow:inset 1px 1px #bbb,inset -1px -1px #555;}
-.mc-recipe-list{display:grid;grid-template-columns:1fr;gap:6px;margin-bottom:8px;max-height:140px;overflow:auto;}
+.mc-recipe-list{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:8px;}
 .mc-recipe-row{display:flex;justify-content:space-between;align-items:center;background:#b0b0b0;padding:4px;border:1px solid #666;}
 .mc-inventory-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:4px;min-height:130px;background:#9d9d9d;padding:6px;border:2px solid #666;}
 .mc-item-slot{height:46px;background:#8b8b8b;border:2px solid #333;box-shadow:inset 1px 1px #bbb,inset -1px -1px #555;color:#fff;font-size:12px;display:flex;align-items:flex-end;justify-content:flex-end;padding:4px;position:relative;}

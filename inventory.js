@@ -8,22 +8,30 @@ export class Inventory {
     this.maxStack = maxStack;
   }
 
-  add(itemId, amount = 1) {
+  add(itemId, amount = 1, preferHotbar = false) {
     let remain = amount;
+    const ranges = preferHotbar ? [[27, 36], [0, 27]] : [[0, this.slots.length]];
+
     // 先填滿同類未滿堆疊
-    for (const slot of this.slots) {
-      if (!slot || slot.itemId !== itemId || slot.count >= this.maxStack) continue;
-      const addable = Math.min(this.maxStack - slot.count, remain);
-      slot.count += addable;
-      remain -= addable;
-      if (remain <= 0) return;
+    for (const [start, end] of ranges) {
+      for (let i = start; i < end; i++) {
+        const slot = this.slots[i];
+        if (!slot || slot.itemId !== itemId || slot.count >= this.maxStack) continue;
+        const addable = Math.min(this.maxStack - slot.count, remain);
+        slot.count += addable;
+        remain -= addable;
+        if (remain <= 0) return;
+      }
     }
+
     // 再塞空位
-    for (let i = 0; i < this.slots.length && remain > 0; i++) {
-      if (this.slots[i] !== null) continue;
-      const stackCount = Math.min(this.maxStack, remain);
-      this.slots[i] = { itemId, count: stackCount };
-      remain -= stackCount;
+    for (const [start, end] of ranges) {
+      for (let i = start; i < end && remain > 0; i++) {
+        if (this.slots[i] !== null) continue;
+        const stackCount = Math.min(this.maxStack, remain);
+        this.slots[i] = { itemId, count: stackCount };
+        remain -= stackCount;
+      }
     }
   }
 

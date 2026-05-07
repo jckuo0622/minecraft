@@ -72,26 +72,25 @@ function renderInventory() {
 
 function renderCrafting() {
     craftingList.innerHTML = '';
-    craftingManager.recipes.forEach((recipe) => {
-        const row = document.createElement('div');
-        row.className = 'mc-recipe-row';
+    craftingList.style.display = 'grid';
+    craftingList.style.gridTemplateColumns = 'repeat(2, 1fr)';
+    craftingList.style.gap = '6px';
 
-        const label = document.createElement('span');
-        label.textContent = recipe.label;
-
-        const btn = document.createElement('button');
-        btn.textContent = '合成';
-        btn.disabled = !craftingManager.canCraft(recipe);
-        btn.addEventListener('click', () => {
+    craftingManager.recipes.slice(0, 4).forEach((recipe) => {
+        const row = document.createElement('button');
+        row.className = 'mc-item-slot';
+        row.style.height = '54px';
+        row.title = recipe.label;
+        row.disabled = !craftingManager.canCraft(recipe);
+        const outIcon = itemIconDataUrl[recipe.output.itemId] || '';
+        row.innerHTML = `<div class="mc-item-icon" style="background-image:url(${outIcon})"></div><span>x${recipe.output.amount}</span>`;
+        row.addEventListener('click', () => {
             const result = craftingManager.craft(recipe);
             setCraftMessage(result.message);
             renderInventory();
             renderCrafting();
             renderHotbar();
         });
-
-        row.appendChild(label);
-        row.appendChild(btn);
         craftingList.appendChild(row);
     });
 }
@@ -178,7 +177,7 @@ function updateDrops(dt) {
         const dy = (drop.position.y + 0.5) - (camera.position.y - currentHeight + 0.6);
         const dz = drop.position.z - camera.position.z;
         if ((dx * dx + dy * dy + dz * dz) < 2.25) {
-            inventory.add(drop.userData.itemId, 1);
+            inventory.add(drop.userData.itemId, 1, true);
             renderHotbar();
             if (inventoryOpen) { renderInventory(); renderCrafting(); }
             scene.remove(drop);
