@@ -32,6 +32,7 @@ craftingManager.addRecipe(new CraftingRecipe('sandstone_recipe', '沙子 x2 + �
 
 const inventoryPanel = document.getElementById('inventory-panel');
 const inventoryList = document.getElementById('inventory-list');
+const inventoryHotbarGrid = document.getElementById('inventory-hotbar-grid');
 const craftingList = document.getElementById('crafting-list');
 const craftingMessage = document.getElementById('crafting-message');
 let inventoryOpen = false;
@@ -42,16 +43,31 @@ function setCraftMessage(msg) {
     craftingMessage.textContent = msg;
 }
 
+function slotHtml(slot, slotIndex) {
+    if (!slot) return `<div class="mc-item-slot" draggable="true" data-slot="${slotIndex}"></div>`;
+    return `<div class="mc-item-slot" draggable="true" data-slot="${slotIndex}"><span class="mc-item-name">${itemDefs[slot.itemId]?.nameZh || slot.itemId}</span><div class="mc-item-icon" style="background-image:url(${itemIconDataUrl[slot.itemId] || ''})"></div><span>x${slot.count}</span></div>`;
+}
+
 function renderInventory() {
-    const items = inventory.entries();
-    if (items.length === 0) {
-        inventoryList.innerHTML = '<div class="mc-item-slot"><span class="mc-item-name">空</span></div>'.repeat(27);
-    } else {
-        const slots = items
-.map(([id, count]) => `<div class=\"mc-item-slot\"><span class=\"mc-item-name\">${itemDefs[id]?.nameZh || id}</span><div class=\"mc-item-icon\" style=\"background-image:url(${itemIconDataUrl[id] || ''})\"></div><span>x${count}</span></div>`);
-        while (slots.length < 27) slots.push('<div class=\"mc-item-slot\"></div>');
-        inventoryList.innerHTML = slots.join('');
-    }
+    const bagSlots = inventory.getSlots(0, 27);
+    const hotbarSlots = inventory.getSlots(27, 36);
+    inventoryList.innerHTML = bagSlots.map((slot, i) => slotHtml(slot, i)).join('');
+    inventoryHotbarGrid.innerHTML = hotbarSlots.map((slot, i) => slotHtml(slot, 27 + i)).join('');
+
+    document.querySelectorAll('.mc-item-slot').forEach((el) => {
+        el.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', el.dataset.slot);
+        });
+        el.addEventListener('dragover', (e) => e.preventDefault());
+        el.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const from = Number(e.dataTransfer.getData('text/plain'));
+            const to = Number(el.dataset.slot);
+            inventory.moveSlot(from, to);
+            renderInventory();
+            renderHotbar();
+        });
+    });
 }
 
 function renderCrafting() {
@@ -332,23 +348,22 @@ const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand'];
 const slots = [];
 
 function renderHotbar() {
-    const entries = inventory.entries();
+    const hotbarSlots = inventory.getSlots(27, 36);
     slots.forEach((slot, i) => {
         const icon = slot.querySelector('.hb-icon');
         const label = slot.querySelector('.hb-count');
-        const entry = entries[i];
+        const entry = hotbarSlots[i];
         if (!entry) {
             icon.style.backgroundImage = '';
             label.textContent = '';
             return;
         }
-        const [id, count] = entry;
-        icon.style.backgroundImage = `url(${itemIconDataUrl[id] || ''})`;
-        label.textContent = `x${count}`;
+        icon.style.backgroundImage = `url(${itemIconDataUrl[entry.itemId] || ''})`;
+        label.textContent = `x${entry.count}`;
     });
 }
 
-for (let i = 0; i < 27; i++) {
+for (let i = 0; i < 9; i++) {
     const slot = document.createElement('div');
     slot.style.cssText = `width:54px; height:54px; border:3px solid #8b8b8b; background:#555; position:relative;`;
 
@@ -412,7 +427,11 @@ document.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if (e.code.startsWith('Digit')) {
         const val = parseInt(e.code.replace('Digit', '')) - 1;
-        if (val >= 0 && val < 5) { selectedIdx = val; updateSelection(val); }
+        if (val >= 0 && val < 9) { selectedIdx = val; updateSelection(val); }
+    }
+    if (e.code === 'KeyE') {
+        toggleInventory();
+        return;
     }
     if (e.code === 'KeyE') {
         toggleInventory();
@@ -427,7 +446,7 @@ document.addEventListener('keyup', (e) => {
 });
 window.addEventListener('wheel', (e) => {
     if (!controls.isLocked) return;
-    selectedIdx = (selectedIdx + (e.deltaY > 0 ? 1 : -1) + 5) % 5;
+    selectedIdx = (selectedIdx + (e.deltaY > 0 ? 1 : -1) + 5) % 9;
     updateSelection(selectedIdx);
 }, { passive: true });
 
@@ -447,8 +466,13 @@ window.addEventListener('mousedown', (e) => {
             removeBlockMesh(intersect.object);
             updateNeighbors(pos.x, pos.y, pos.z);
         } else if (e.button === 2) { // 建造
-            const b = new THREE.Mesh(boxGeo, getMaterials(blockTypes[selectedIdx]));
-            b.userData.blockType = blockTypes[selectedIdx];
+            const selectedSlot = inventory.getSlots(27, 36)[selectedIdx];
+            if (!selectedSlot || !blockTypes.includes(selectedSlot.itemId)) return;
+            const b = new THREE.Mesh(boxGeo, getMaterials(selectedSlot.itemId));
+            b.userData.blockType = selectedSlot.itemId;
+            inventory.remove(selectedSlot.itemId, 1);
+            renderInventory();
+            renderHotbar();
             const placePos = pos.add(intersect.face.normal);
             b.position.copy(placePos);
             removedBlocks.delete(`${placePos.x},${placePos.y},${placePos.z}`);

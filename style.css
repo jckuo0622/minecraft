@@ -68,3 +68,5 @@ body { margin: 0; overflow: hidden; background-color: #000; }
 .mc-recipe-row button:disabled{opacity:.5;cursor:not-allowed;}
 
 .mc-item-icon{position:absolute;left:9px;bottom:8px;width:22px;height:22px;background-size:cover;image-rendering:pixelated;}
+
+.mc-hotbar-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:4px;background:#9d9d9d;padding:6px;border:2px solid #666;margin-top:4px;}
