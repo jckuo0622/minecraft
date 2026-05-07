@@ -23,11 +23,67 @@ const CHUNK_SIZE = 16;
 const RENDER_DISTANCE = 2;
 const loadedChunks = new Map();
 const blocks = []; 
+const blockByPos = new Map();
+const columnIndex = new Map();
 const removedBlocks = new Set(); // 儲存被挖掉的座標 "x,y,z"
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const worldWorker = new Worker('./worldWorker.js', { type: 'module' });
 const pendingChunks = new Set();
 const chunkBuildQueue = [];
+
+function posKey(x, y, z) { return `${x},${y},${z}`; }
+function colKey(x, z) { return `${x},${z}`; }
+
+function addBlockMesh(mesh) {
+    const x = Math.round(mesh.position.x);
+    const y = Math.round(mesh.position.y);
+    const z = Math.round(mesh.position.z);
+    const pKey = posKey(x, y, z);
+    if (blockByPos.has(pKey)) return false;
+
+    scene.add(mesh);
+    blocks.push(mesh);
+    blockByPos.set(pKey, mesh);
+
+    const cKey = colKey(x, z);
+    if (!columnIndex.has(cKey)) columnIndex.set(cKey, new Set());
+    columnIndex.get(cKey).add(mesh);
+    return true;
+}
+
+function removeBlockMesh(mesh) {
+    const x = Math.round(mesh.position.x);
+    const y = Math.round(mesh.position.y);
+    const z = Math.round(mesh.position.z);
+    const pKey = posKey(x, y, z);
+
+    scene.remove(mesh);
+    const idx = blocks.indexOf(mesh);
+    if (idx > -1) blocks.splice(idx, 1);
+    blockByPos.delete(pKey);
+
+    const cKey = colKey(x, z);
+    const col = columnIndex.get(cKey);
+    if (col) {
+        col.delete(mesh);
+        if (col.size === 0) columnIndex.delete(cKey);
+    }
+}
+
+function getNearbyBlocks(x, z, radius = 2) {
+    const cx = Math.round(x);
+    const cz = Math.round(z);
+    const nearby = [];
+    for (let dx = -radius; dx <= radius; dx++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+            const col = columnIndex.get(colKey(cx + dx, cz + dz));
+            if (!col) continue;
+            nearby.push(...col);
+        }
+    }
+    return nearby;
+}
+
 
 function getSurfaceHeightApprox(x, z) {
     let mountain = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 5;
@@ -46,22 +102,17 @@ function updateNeighbors(x, y, z) {
 
     directions.forEach(([dx, dy, dz]) => {
         const nx = x + dx, ny = y + dy, nz = z + dz;
-        const posKey = `${nx},${ny},${nz}`;
+        const neighborKey = `${nx},${ny},${nz}`;
 
-        if (removedBlocks.has(posKey)) return; // 挖掉的地方不補
+        if (removedBlocks.has(neighborKey)) return; // 挖掉的地方不補
         if (ny > getSurfaceHeightApprox(nx, nz) || ny < -20) return; // 限制高度與地底深度
 
-        const exists = blocks.some(b => 
-            Math.abs(b.position.x - nx) < 0.1 && 
-            Math.abs(b.position.y - ny) < 0.1 && 
-            Math.abs(b.position.z - nz) < 0.1
-        );
+        const exists = blockByPos.has(posKey(nx, ny, nz));
 
         if (!exists) {
             const m = new THREE.Mesh(boxGeo, getMaterials('stone'));
             m.position.set(nx, ny, nz);
-            scene.add(m);
-            blocks.push(m);
+            addBlockMesh(m);
         }
     });
 }
@@ -94,8 +145,7 @@ function flushChunkBuildQueue(maxChunksPerFrame = 1) {
         for (const data of blockData) {
             const m = new THREE.Mesh(boxGeo, getMaterials(data.type));
             m.position.set(data.x, data.y, data.z);
-            scene.add(m);
-            blocks.push(m);
+            addBlockMesh(m);
             chunkBlocks.push(m);
         }
         loadedChunks.set(key, chunkBlocks);
@@ -116,9 +166,7 @@ function updateWorld() {
         const [cx, cz] = key.split(',').map(Number);
         if (Math.abs(cx - px) > RENDER_DISTANCE + 1 || Math.abs(cz - pz) > RENDER_DISTANCE + 1) {
             chunkBlocks.forEach(b => {
-                scene.remove(b);
-                const idx = blocks.indexOf(b);
-                if (idx > -1) blocks.splice(idx, 1);
+                removeBlockMesh(b);
             });
             loadedChunks.delete(key);
         }
@@ -213,22 +261,21 @@ window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-    const intersects = raycaster.intersectObjects(blocks);
+    const interactableBlocks = getNearbyBlocks(camera.position.x, camera.position.z, 4);
+    const intersects = raycaster.intersectObjects(interactableBlocks);
     if (intersects.length > 0) {
         const intersect = intersects[0];
         const pos = intersect.object.position.clone();
         if (e.button === 0) { // 挖掘
             removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
-            scene.remove(intersect.object);
-            const idx = blocks.indexOf(intersect.object);
-            if (idx > -1) blocks.splice(idx, 1);
+            removeBlockMesh(intersect.object);
             updateNeighbors(pos.x, pos.y, pos.z);
         } else if (e.button === 2) { // 建造
             const b = new THREE.Mesh(boxGeo, getMaterials(blockTypes[selectedIdx]));
             const placePos = pos.add(intersect.face.normal);
             b.position.copy(placePos);
             removedBlocks.delete(`${placePos.x},${placePos.y},${placePos.z}`);
-            scene.add(b); blocks.push(b);
+            addBlockMesh(b);
         }
     }
 });
@@ -258,7 +305,8 @@ function animate() {
         velocity.z -= velocity.z * 10 * dt;
         
         const feetY = camera.position.y - currentHeight;
-        const groundH = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, feetY);
+        const nearbyGroundBlocks = getNearbyBlocks(camera.position.x, camera.position.z);
+        const groundH = getGroundAt(camera.position.x, camera.position.z, nearbyGroundBlocks, playerRadius, feetY);
 
         if (groundH === -999) { velocity.y = 0; }
         else { velocity.y -= 28 * dt; }
@@ -280,12 +328,12 @@ function animate() {
         }
 
         const nextX = camera.position.x + velocity.x * dt;
-        if (!checkWall(nextX, camera.position.y, camera.position.z, blocks, playerRadius)) {
-            if (getGroundAt(nextX, camera.position.z, blocks, playerRadius, feetY) !== -999) camera.position.x = nextX;
+        if (!checkWall(nextX, camera.position.y, camera.position.z, nearbyGroundBlocks, playerRadius)) {
+            if (getGroundAt(nextX, camera.position.z, nearbyGroundBlocks, playerRadius, feetY) !== -999) camera.position.x = nextX;
         }
         const nextZ = camera.position.z + velocity.z * dt;
-        if (!checkWall(camera.position.x, camera.position.y, nextZ, blocks, playerRadius)) {
-            if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius, feetY) !== -999) camera.position.z = nextZ;
+        if (!checkWall(camera.position.x, camera.position.y, nextZ, nearbyGroundBlocks, playerRadius)) {
+            if (getGroundAt(camera.position.x, nextZ, nearbyGroundBlocks, playerRadius, feetY) !== -999) camera.position.z = nextZ;
         }
         camera.position.y += velocity.y * dt;
         if (groundH !== -999 && camera.position.y - currentHeight <= groundH) {
