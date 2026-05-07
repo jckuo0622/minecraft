@@ -121,6 +121,35 @@
         </div>
     </div>
 
+    <div id="inventory-panel" class="mc-inventory">
+        <div class="mc-panel-wrap">
+            <div class="mc-panel">
+                <div class="mc-top-row">
+                    <div class="mc-avatar">Steve</div>
+                    <div class="mc-crafting-area">
+                        <div class="mc-title">2x2</div>
+                        <div class="mc-craft-grid" id="craft-grid">
+                            <div class="slot craft-slot" data-cslot="0"></div><div class="slot craft-slot" data-cslot="1"></div>
+                            <div class="slot craft-slot" data-cslot="2"></div><div class="slot craft-slot" data-cslot="3"></div>
+                        </div>
+                        <div class="mc-craft-result" id="craft-result"></div>
+                    </div>
+                </div>
+                
+                <div class="mc-title" style="margin-top:8px;">背包（E 開關）</div>
+                <div id="inventory-list" class="mc-inventory-grid"></div>
+                <div class="mc-title" style="margin-top:6px;">物品欄</div>
+                <div id="inventory-hotbar-grid" class="mc-hotbar-grid"></div>
+                <div id="crafting-message" class="mc-message"></div>
+            </div>
+
+            <div class="mc-recipe-book">
+                <div class="mc-title">合成表</div>
+                <div id="quick-craft-list" class="quick-craft-list"></div>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="game.js"></script>
 </body>
 </html>

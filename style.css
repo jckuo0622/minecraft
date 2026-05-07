@@ -84,3 +84,7 @@ body { margin: 0; overflow: hidden; background-color: #000; }
 
 #inventory-panel{display:none !important;}
 #inventory-panel.open{display:flex !important;}
+
+#overlay .mc-recipe-book{display:none !important;}
+#inventory-panel .mc-recipe-book{display:none;}
+#inventory-panel.open .mc-recipe-book{display:block;}
