@@ -33,11 +33,12 @@ craftingManager.addRecipe(new CraftingRecipe('sandstone_recipe', '沙子 x2 + �
 const inventoryPanel = document.getElementById('inventory-panel');
 const inventoryList = document.getElementById('inventory-list');
 const inventoryHotbarGrid = document.getElementById('inventory-hotbar-grid');
-const craftingList = document.getElementById('crafting-list');
 const craftingMessage = document.getElementById('crafting-message');
+const craftResultEl = document.getElementById('craft-result');
 let inventoryOpen = false;
 let openedInventoryFromLock = false;
 let unlockingForInventory = false;
+const craftSlots = [null, null, null, null];
 
 function setCraftMessage(msg) {
     craftingMessage.textContent = msg;
@@ -70,29 +71,68 @@ function renderInventory() {
     });
 }
 
-function renderCrafting() {
-    craftingList.innerHTML = '';
-    craftingList.style.display = 'grid';
-    craftingList.style.gridTemplateColumns = 'repeat(2, 1fr)';
-    craftingList.style.gap = '6px';
+function getCraftResult() {
+    const counts = new Map();
+    for (const slot of craftSlots) {
+        if (!slot) continue;
+        counts.set(slot.itemId, (counts.get(slot.itemId) || 0) + slot.count);
+    }
 
-    craftingManager.recipes.slice(0, 4).forEach((recipe) => {
-        const row = document.createElement('button');
-        row.className = 'mc-item-slot';
-        row.style.height = '54px';
-        row.title = recipe.label;
-        row.disabled = !craftingManager.canCraft(recipe);
-        const outIcon = itemIconDataUrl[recipe.output.itemId] || '';
-        row.innerHTML = `<div class="mc-item-icon" style="background-image:url(${outIcon})"></div><span>x${recipe.output.amount}</span>`;
-        row.addEventListener('click', () => {
-            const result = craftingManager.craft(recipe);
-            setCraftMessage(result.message);
+    for (const recipe of craftingManager.recipes) {
+        const needs = new Map(recipe.inputs.map(i => [i.itemId, i.amount]));
+        if (counts.size !== needs.size) continue;
+        let ok = true;
+        for (const [id, amount] of needs) {
+            if ((counts.get(id) || 0) !== amount) { ok = false; break; }
+        }
+        if (ok) return recipe;
+    }
+    return null;
+}
+
+function renderCrafting() {
+    document.querySelectorAll('.craft-slot').forEach((el) => {
+        const idx = Number(el.dataset.cslot);
+        const slot = craftSlots[idx];
+        if (!slot) el.innerHTML = '';
+        else el.innerHTML = `<div class="mc-item-icon" style="background-image:url(${itemIconDataUrl[slot.itemId] || ''})"></div><span style="position:absolute;right:4px;bottom:2px;color:white;font-size:10px;">x${slot.count}</span>`;
+
+        el.ondragover = (e) => e.preventDefault();
+        el.ondrop = (e) => {
+            e.preventDefault();
+            const from = Number(e.dataTransfer.getData('text/plain'));
+            if (Number.isNaN(from)) return;
+            const invSlot = inventory.slots[from];
+            if (!invSlot) return;
+            craftSlots[idx] = { itemId: invSlot.itemId, count: 1 };
+            inventory.remove(invSlot.itemId, 1);
             renderInventory();
-            renderCrafting();
             renderHotbar();
-        });
-        craftingList.appendChild(row);
+            renderCrafting();
+        };
+        el.onclick = () => {
+            const c = craftSlots[idx];
+            if (!c) return;
+            inventory.add(c.itemId, c.count, false);
+            craftSlots[idx] = null;
+            renderInventory(); renderHotbar(); renderCrafting();
+        };
     });
+
+    const recipe = getCraftResult();
+    if (!recipe) {
+        craftResultEl.innerHTML = '';
+        craftResultEl.onclick = null;
+        return;
+    }
+    craftResultEl.innerHTML = `<div class="mc-item-icon" style="background-image:url(${itemIconDataUrl[recipe.output.itemId] || ''})"></div><span style="position:absolute;right:4px;bottom:2px;color:white;font-size:10px;">x${recipe.output.amount}</span>`;
+    craftResultEl.onclick = () => {
+        // 消耗 crafting 格
+        for (let i = 0; i < craftSlots.length; i++) craftSlots[i] = null;
+        inventory.add(recipe.output.itemId, recipe.output.amount, false);
+        setCraftMessage(`合成成功：${itemDefs[recipe.output.itemId]?.nameZh || recipe.output.itemId}`);
+        renderInventory(); renderHotbar(); renderCrafting();
+    };
 }
 
 function toggleInventory() {
