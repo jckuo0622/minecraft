@@ -49,3 +49,35 @@ body { margin: 0; overflow: hidden; background-color: #000; }
 #hotbar {
     border-radius: 0px !important;
 }
+
+.mc-inventory {position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25);z-index:20;font-family:monospace;}
+.mc-panel {width:520px;background:#c6c6c6;border:3px solid #222;box-shadow:inset 2px 2px #fff,inset -2px -2px #555;padding:12px;}
+.mc-top-row{display:flex;gap:14px;margin-bottom:10px;}
+.mc-avatar{width:130px;height:150px;background:#111;color:#7fd9ff;display:flex;align-items:center;justify-content:center;border:2px solid #3a3a3a;}
+.mc-crafting-area{flex:1;}
+.mc-title{font-weight:700;color:#222;margin-bottom:6px;}
+.mc-craft-grid{display:grid;grid-template-columns:repeat(2,42px);gap:6px;}
+.slot{width:42px;height:42px;background:#8b8b8b;border:2px solid #333;box-shadow:inset 1px 1px #bbb,inset -1px -1px #555;}
+.mc-recipe-list{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:8px;}
+.mc-recipe-row{display:flex;justify-content:space-between;align-items:center;background:#b0b0b0;padding:4px;border:1px solid #666;}
+.mc-inventory-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:4px;min-height:130px;background:#9d9d9d;padding:6px;border:2px solid #666;}
+.mc-item-slot{height:46px;background:#8b8b8b;border:2px solid #333;box-shadow:inset 1px 1px #bbb,inset -1px -1px #555;color:#fff;font-size:12px;display:flex;align-items:flex-end;justify-content:flex-end;padding:4px;position:relative;}
+.mc-item-name{position:absolute;left:4px;top:4px;color:#ffe9a0;font-size:10px;}
+.mc-message{margin-top:8px;color:#2f2f2f;font-weight:700;}
+.mc-recipe-row button{font-family:inherit;padding:3px 8px;border:1px solid #333;background:#d8d8d8;cursor:pointer;}
+.mc-recipe-row button:disabled{opacity:.5;cursor:not-allowed;}
+
+.mc-item-icon{position:absolute;left:9px;bottom:8px;width:22px;height:22px;background-size:cover;image-rendering:pixelated;}
+
+.mc-hotbar-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:4px;background:#9d9d9d;padding:6px;border:2px solid #666;margin-top:4px;}
+
+.mc-craft-grid .slot{position:relative;}
+.craft-slot .mc-item-icon{left:9px;bottom:8px;}
+.mc-craft-result{width:54px;height:54px;background:#8b8b8b;border:2px solid #333;box-shadow:inset 1px 1px #bbb,inset -1px -1px #555;margin-top:8px;position:relative;}
+
+.mc-panel-wrap{display:flex;gap:14px;align-items:flex-start;}
+.mc-recipe-book{width:220px;background:#c6c6c6;border:3px solid #222;box-shadow:inset 2px 2px #fff,inset -2px -2px #555;padding:10px;}
+.quick-craft-list{display:grid;grid-template-columns:1fr;gap:6px;max-height:360px;overflow:auto;}
+.quick-craft-item{display:flex;align-items:center;justify-content:space-between;background:#9d9d9d;border:1px solid #666;padding:4px;}
+.quick-craft-item button{font-family:inherit;border:1px solid #333;background:#d8d8d8;cursor:pointer;padding:2px 6px;}
+.quick-craft-item button:disabled{opacity:.5;cursor:not-allowed;}
