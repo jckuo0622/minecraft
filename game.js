@@ -36,11 +36,12 @@ function setCraftMessage(msg) {
 function renderInventory() {
     const items = inventory.entries();
     if (items.length === 0) {
-        inventoryList.innerHTML = '<div>目前沒有物品</div>';
+        inventoryList.innerHTML = '<div class="mc-item-slot"><span class="mc-item-name">空</span></div>'.repeat(27);
     } else {
-        inventoryList.innerHTML = items
-            .map(([id, count]) => `<div>${itemDefs[id]?.nameZh || id} x ${count}</div>`)
-            .join('');
+        const slots = items
+            .map(([id, count]) => `<div class=\"mc-item-slot\"><span class=\"mc-item-name\">${itemDefs[id]?.nameZh || id}</span><span>x${count}</span></div>`);
+        while (slots.length < 27) slots.push('<div class=\"mc-item-slot\"></div>');
+        inventoryList.innerHTML = slots.join('');
     }
 }
 
@@ -48,7 +49,7 @@ function renderCrafting() {
     craftingList.innerHTML = '';
     craftingManager.recipes.forEach((recipe) => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:10px;';
+        row.className = 'mc-recipe-row';
 
         const label = document.createElement('span');
         label.textContent = recipe.label;
