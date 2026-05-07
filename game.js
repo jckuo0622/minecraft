@@ -16,6 +16,13 @@ const itemDefs = {
     sandstone: new BlockItem('sandstone', '砂岩')
 };
 
+const itemIconDataUrl = {};
+Object.keys(blockIconColors).forEach((id) => {
+    const colors = blockIconColors[id];
+    const cv = getPixelCanvas(colors[0], colors[1]);
+    itemIconDataUrl[id] = cv.toDataURL();
+});
+
 const inventory = new Inventory();
 const craftingManager = new CraftingManager(inventory);
 craftingManager.addRecipe(new CraftingRecipe('plank_recipe', '木頭 x1 → 木板 x4', [{ itemId: 'wood', amount: 1 }], { itemId: 'plank', amount: 4 }));
@@ -41,7 +48,7 @@ function renderInventory() {
         inventoryList.innerHTML = '<div class="mc-item-slot"><span class="mc-item-name">空</span></div>'.repeat(27);
     } else {
         const slots = items
-            .map(([id, count]) => `<div class=\"mc-item-slot\"><span class=\"mc-item-name\">${itemDefs[id]?.nameZh || id}</span><span>x${count}</span></div>`);
+.map(([id, count]) => `<div class=\"mc-item-slot\"><span class=\"mc-item-name\">${itemDefs[id]?.nameZh || id}</span><div class=\"mc-item-icon\" style=\"background-image:url(${itemIconDataUrl[id] || ''})\"></div><span>x${count}</span></div>`);
         while (slots.length < 27) slots.push('<div class=\"mc-item-slot\"></div>');
         inventoryList.innerHTML = slots.join('');
     }
@@ -137,7 +144,17 @@ function updateDrops(dt) {
         const drop = droppedItems[i];
         drop.userData.vy -= 18 * dt;
         drop.position.y += drop.userData.vy * dt;
-        if (drop.position.y < -20) drop.position.y = -20;
+
+        const nearby = getNearbyBlocks(drop.position.x, drop.position.z, 2);
+        const groundTop = getGroundAt(drop.position.x, drop.position.z, nearby, 0.2, drop.position.y + 0.5);
+        if (groundTop !== -999 && drop.position.y <= groundTop + 0.18) {
+            drop.position.y = groundTop + 0.18;
+            drop.userData.vy = 0;
+        }
+        if (drop.position.y < -20) {
+            drop.position.y = -20;
+            drop.userData.vy = 0;
+        }
 
         const dx = drop.position.x - camera.position.x;
         const dy = (drop.position.y + 0.5) - (camera.position.y - currentHeight + 0.6);
