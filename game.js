@@ -383,8 +383,8 @@ function updateAnimals(dt) {
         const currentGround = getGroundAt(mob.position.x, mob.position.z, nearby, 0.25, currentFeetY);
         const nextGround = getGroundAt(nextX, nextZ, nearby, 0.25, currentFeetY);
 
-        const blockedX = checkWall(nextX, mob.position.y + 0.55, mob.position.z, nearby, 0.24);
-        const blockedZ = checkWall(mob.position.x, mob.position.y + 0.55, nextZ, nearby, 0.24);
+        const blockedX = checkWall(nextX, mob.position.y + 1.0, mob.position.z, nearby, 0.24);
+        const blockedZ = checkWall(mob.position.x, mob.position.y + 1.0, nextZ, nearby, 0.24);
         const dropTooHigh = currentGround !== -999 && nextGround !== -999 && (currentGround - nextGround) > 1.1;
         const voidAhead = currentGround !== -999 && nextGround === -999;
         const steepDropAhead = dropTooHigh || voidAhead;
@@ -410,7 +410,7 @@ function updateAnimals(dt) {
             if (data.stuckTime > 1.2) {
                 const nudgeX = mob.position.x + data.direction.x * 0.25;
                 const nudgeZ = mob.position.z + data.direction.z * 0.25;
-                const nudgeBlocked = checkWall(nudgeX, mob.position.y + 0.55, nudgeZ, nearby, 0.24);
+                const nudgeBlocked = checkWall(nudgeX, mob.position.y + 1.0, nudgeZ, nearby, 0.24);
                 const nudgeGround = getGroundAt(nudgeX, nudgeZ, nearby, 0.25, mob.position.y + 0.15);
                 if (!nudgeBlocked && nudgeGround !== -999) {
                     mob.position.x = nudgeX;
