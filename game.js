@@ -408,8 +408,14 @@ function updateAnimals(dt) {
                 data.blockedTurnCooldown = 0.25;
             }
             if (data.stuckTime > 1.2) {
-                mob.position.x += data.direction.x * 0.25;
-                mob.position.z += data.direction.z * 0.25;
+                const nudgeX = mob.position.x + data.direction.x * 0.25;
+                const nudgeZ = mob.position.z + data.direction.z * 0.25;
+                const nudgeBlocked = checkWall(nudgeX, mob.position.y + 0.55, nudgeZ, nearby, 0.24);
+                const nudgeGround = getGroundAt(nudgeX, nudgeZ, nearby, 0.25, mob.position.y + 0.15);
+                if (!nudgeBlocked && nudgeGround !== -999) {
+                    mob.position.x = nudgeX;
+                    mob.position.z = nudgeZ;
+                }
                 data.stuckTime = 0;
             }
         } else {
@@ -417,17 +423,20 @@ function updateAnimals(dt) {
         }
 
         data.velocityY -= 20 * dt;
+        const nearbyAfterMove = getNearbyBlocks(mob.position.x, mob.position.z, 3);
         const feetY = mob.position.y + 0.15;
-        const ground = getGroundAt(mob.position.x, mob.position.z, nearby, 0.25, feetY);
+        const ground = getGroundAt(mob.position.x, mob.position.z, nearbyAfterMove, 0.25, feetY);
         if (ground !== -999) {
-            if (mob.position.y + data.velocityY * dt <= ground) {
-                mob.position.y = ground;
-                data.velocityY = 0;
-            } else {
-                mob.position.y += data.velocityY * dt;
-            }
+            const nextY = mob.position.y + data.velocityY * dt;
+            mob.position.y = Math.max(nextY, ground);
+            if (mob.position.y <= ground + 0.001) data.velocityY = 0;
         } else {
             mob.position.y += data.velocityY * dt;
+            const fallbackGround = getSurfaceHeightApprox(Math.round(mob.position.x), Math.round(mob.position.z));
+            if (mob.position.y < fallbackGround - 2) {
+                mob.position.y = fallbackGround;
+                data.velocityY = 0;
+            }
             if (mob.position.y < -25) {
                 mob.position.x = Math.round(mob.position.x) + 0.5;
                 mob.position.z = Math.round(mob.position.z) + 0.5;
