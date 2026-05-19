@@ -286,6 +286,7 @@ function createAnimal(animalType, x, y, z) {
         turnTimer: 1 + Math.random() * 3,
         walkSpeed: 0.8 + Math.random() * 0.5,
         legPhase: Math.random() * Math.PI * 2,
+        stuckTime: 0,
         legs,
         homeY: y
     };
@@ -382,14 +383,32 @@ function updateAnimals(dt) {
 
         const blockedX = checkWall(nextX, mob.position.y + 0.55, mob.position.z, nearby, 0.24);
         const blockedZ = checkWall(mob.position.x, mob.position.y + 0.55, nextZ, nearby, 0.24);
-        const steepDropAhead = currentGround !== -999 && nextGround === -999;
+        const dropTooHigh = currentGround !== -999 && nextGround !== -999 && (currentGround - nextGround) > 1.1;
+        const voidAhead = currentGround !== -999 && nextGround === -999;
+        const steepDropAhead = dropTooHigh || voidAhead;
 
-        if (!blockedX && !steepDropAhead) mob.position.x = nextX;
-        if (!blockedZ && !steepDropAhead) mob.position.z = nextZ;
+        let moved = false;
+        if (!blockedX && !steepDropAhead) {
+            mob.position.x = nextX;
+            moved = true;
+        }
+        if (!blockedZ && !steepDropAhead) {
+            mob.position.z = nextZ;
+            moved = true;
+        }
 
-        if (blockedX || blockedZ || steepDropAhead) {
-            data.direction.multiplyScalar(-1);
-            data.turnTimer = 0.5 + Math.random() * 1.2;
+        if (!moved) {
+            data.stuckTime += dt;
+            const turn = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+            data.direction.lerp(turn, 0.9).normalize();
+            data.turnTimer = 0.2 + Math.random() * 0.4;
+            if (data.stuckTime > 1.2) {
+                mob.position.x += data.direction.x * 0.25;
+                mob.position.z += data.direction.z * 0.25;
+                data.stuckTime = 0;
+            }
+        } else {
+            data.stuckTime = 0;
         }
 
         data.velocityY -= 20 * dt;
@@ -424,6 +443,7 @@ function updateAnimals(dt) {
         if (dx * dx + dz * dz > 110 * 110) {
             scene.remove(mob);
             animals.splice(i, 1);
+            spawnedAnimalCells.delete(animalCellKey(mob.position.x, mob.position.z));
         }
     }
 }
