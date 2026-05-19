@@ -231,6 +231,67 @@ const pendingChunks = new Set();
 const chunkBuildQueue = [];
 const droppedItems = [];
 
+const animalTypes = {
+    pig: { name: '豬', body: ['#f7a9b8', '#e892a4'], accent: '#d97b8e', spawnWeight: 0.4 },
+    cow: { name: '牛', body: ['#5b4638', '#463527'], accent: '#f4f0e8', spawnWeight: 0.3 },
+    sheep: { name: '羊', body: ['#efefef', '#d8d8d8'], accent: '#555555', spawnWeight: 0.3 }
+};
+
+function chooseAnimalType(x, z) {
+    const roll = (Math.sin(x * 0.17 + z * 0.21) + 1) * 0.5;
+    let acc = 0;
+    for (const [type, cfg] of Object.entries(animalTypes)) {
+        acc += cfg.spawnWeight;
+        if (roll <= acc) return type;
+    }
+    return 'pig';
+}
+
+function createAnimal(animalType, x, y, z) {
+    const config = animalTypes[animalType] || animalTypes.pig;
+    const mob = new THREE.Group();
+
+    const bodyTex = new THREE.CanvasTexture(getPixelCanvas(config.body[0], config.body[1]));
+    bodyTex.magFilter = THREE.NearestFilter;
+    bodyTex.minFilter = THREE.NearestFilter;
+    bodyTex.generateMipmaps = false;
+    const bodyMat = new THREE.MeshLambertMaterial({ map: bodyTex });
+
+    const accentMat = new THREE.MeshLambertMaterial({ color: config.accent });
+
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.6, 0.45), bodyMat);
+    body.position.y = 0.65;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.36), bodyMat);
+    head.position.set(0, 0.74, 0.42);
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.09), accentMat);
+    nose.position.set(0, 0.7, 0.63);
+
+    const legGeo = new THREE.BoxGeometry(0.16, 0.45, 0.16);
+    const legs = [
+        [-0.28, 0.23, 0.15], [0.28, 0.23, 0.15],
+        [-0.28, 0.23, -0.15], [0.28, 0.23, -0.15]
+    ].map(([lx, ly, lz]) => {
+        const leg = new THREE.Mesh(legGeo, bodyMat);
+        leg.position.set(lx, ly, lz);
+        mob.add(leg);
+        return leg;
+    });
+
+    mob.add(body, head, nose);
+    mob.position.set(x, y, z);
+    mob.userData = {
+        animalType,
+        velocityY: 0,
+        direction: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(),
+        turnTimer: 1 + Math.random() * 3,
+        walkSpeed: 0.8 + Math.random() * 0.5,
+        legPhase: Math.random() * Math.PI * 2,
+        legs,
+        homeY: y
+    };
+    return mob;
+}
+
 function spawnDrop(itemId, x, y, z) {
     const drop = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), getMaterials(itemId));
     drop.position.set(x, y + 0.6, z);
@@ -270,6 +331,79 @@ function updateDrops(dt) {
     }
 }
 
+
+
+const animals = [];
+const spawnedAnimalCells = new Set();
+
+function animalCellKey(x, z) {
+    return `${Math.floor(x / 12)},${Math.floor(z / 12)}`;
+}
+
+function spawnAnimalsNearPlayer(maxAnimals = 18) {
+    if (animals.length >= maxAnimals) return;
+    const px = Math.floor(camera.position.x);
+    const pz = Math.floor(camera.position.z);
+    for (let i = 0; i < 2 && animals.length < maxAnimals; i++) {
+        const rx = px + Math.floor((Math.random() - 0.5) * 44);
+        const rz = pz + Math.floor((Math.random() - 0.5) * 44);
+        const cell = animalCellKey(rx, rz);
+        if (spawnedAnimalCells.has(cell)) continue;
+        const y = getSurfaceHeightApprox(rx, rz) + 0.01;
+        if (y < -8) continue;
+        const type = chooseAnimalType(rx, rz);
+        const mob = createAnimal(type, rx + 0.5, y, rz + 0.5);
+        scene.add(mob);
+        animals.push(mob);
+        spawnedAnimalCells.add(cell);
+    }
+}
+
+function updateAnimals(dt) {
+    for (let i = animals.length - 1; i >= 0; i--) {
+        const mob = animals[i];
+        const data = mob.userData;
+        data.turnTimer -= dt;
+        if (data.turnTimer <= 0) {
+            data.turnTimer = 1 + Math.random() * 3;
+            const jitter = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+            data.direction.lerp(jitter, 0.65).normalize();
+        }
+
+        const nx = mob.position.x + data.direction.x * data.walkSpeed * dt;
+        const nz = mob.position.z + data.direction.z * data.walkSpeed * dt;
+        const near = getNearbyBlocks(nx, nz, 2);
+        const ground = getGroundAt(nx, nz, near, 0.25, mob.position.y + 0.3);
+        data.velocityY -= 20 * dt;
+        if (ground !== -999) {
+            const targetY = ground;
+            if (mob.position.y + data.velocityY * dt <= targetY) {
+                mob.position.y = targetY;
+                data.velocityY = 0;
+            } else {
+                mob.position.y += data.velocityY * dt;
+            }
+            if (Math.abs(targetY - mob.position.y) < 0.1) {
+                mob.position.x = nx;
+                mob.position.z = nz;
+            }
+        }
+
+        mob.rotation.y = Math.atan2(data.direction.x, data.direction.z);
+        data.legPhase += dt * 8;
+        data.legs[0].rotation.x = Math.sin(data.legPhase) * 0.35;
+        data.legs[1].rotation.x = Math.sin(data.legPhase + Math.PI) * 0.35;
+        data.legs[2].rotation.x = Math.sin(data.legPhase + Math.PI) * 0.35;
+        data.legs[3].rotation.x = Math.sin(data.legPhase) * 0.35;
+
+        const dx = mob.position.x - camera.position.x;
+        const dz = mob.position.z - camera.position.z;
+        if (dx * dx + dz * dz > 110 * 110) {
+            scene.remove(mob);
+            animals.splice(i, 1);
+        }
+    }
+}
 
 function posKey(x, y, z) { return `${x},${y},${z}`; }
 function colKey(x, z) { return `${x},${z}`; }
@@ -580,6 +714,8 @@ function animate() {
         const dt = Math.min((t - prevT) / 1000, 0.05);
         prevT = t;
         updateDrops(dt);
+        spawnAnimalsNearPlayer();
+        updateAnimals(dt);
 
         const targetH = isCrouching ? 1.2 : 1.7;
         currentHeight += (targetH - currentHeight) * 0.2;
