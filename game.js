@@ -370,22 +370,45 @@ function updateAnimals(dt) {
             data.direction.lerp(jitter, 0.65).normalize();
         }
 
-        const nx = mob.position.x + data.direction.x * data.walkSpeed * dt;
-        const nz = mob.position.z + data.direction.z * data.walkSpeed * dt;
-        const near = getNearbyBlocks(nx, nz, 2);
-        const ground = getGroundAt(nx, nz, near, 0.25, mob.position.y + 0.3);
+        const stepX = data.direction.x * data.walkSpeed * dt;
+        const stepZ = data.direction.z * data.walkSpeed * dt;
+        const nextX = mob.position.x + stepX;
+        const nextZ = mob.position.z + stepZ;
+        const nearby = getNearbyBlocks(mob.position.x, mob.position.z, 3);
+
+        const currentFeetY = mob.position.y + 0.15;
+        const currentGround = getGroundAt(mob.position.x, mob.position.z, nearby, 0.25, currentFeetY);
+        const nextGround = getGroundAt(nextX, nextZ, nearby, 0.25, currentFeetY);
+
+        const blockedX = checkWall(nextX, mob.position.y + 0.55, mob.position.z, nearby, 0.24);
+        const blockedZ = checkWall(mob.position.x, mob.position.y + 0.55, nextZ, nearby, 0.24);
+        const steepDropAhead = currentGround !== -999 && nextGround === -999;
+
+        if (!blockedX && !steepDropAhead) mob.position.x = nextX;
+        if (!blockedZ && !steepDropAhead) mob.position.z = nextZ;
+
+        if (blockedX || blockedZ || steepDropAhead) {
+            data.direction.multiplyScalar(-1);
+            data.turnTimer = 0.5 + Math.random() * 1.2;
+        }
+
         data.velocityY -= 20 * dt;
+        const feetY = mob.position.y + 0.15;
+        const ground = getGroundAt(mob.position.x, mob.position.z, nearby, 0.25, feetY);
         if (ground !== -999) {
-            const targetY = ground;
-            if (mob.position.y + data.velocityY * dt <= targetY) {
-                mob.position.y = targetY;
+            if (mob.position.y + data.velocityY * dt <= ground) {
+                mob.position.y = ground;
                 data.velocityY = 0;
             } else {
                 mob.position.y += data.velocityY * dt;
             }
-            if (Math.abs(targetY - mob.position.y) < 0.1) {
-                mob.position.x = nx;
-                mob.position.z = nz;
+        } else {
+            mob.position.y += data.velocityY * dt;
+            if (mob.position.y < -25) {
+                mob.position.x = Math.round(mob.position.x) + 0.5;
+                mob.position.z = Math.round(mob.position.z) + 0.5;
+                mob.position.y = getSurfaceHeightApprox(Math.round(mob.position.x), Math.round(mob.position.z));
+                data.velocityY = 0;
             }
         }
 
