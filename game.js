@@ -287,6 +287,7 @@ function createAnimal(animalType, x, y, z) {
         walkSpeed: 0.8 + Math.random() * 0.5,
         legPhase: Math.random() * Math.PI * 2,
         stuckTime: 0,
+        blockedTurnCooldown: 0,
         legs,
         homeY: y
     };
@@ -365,6 +366,7 @@ function updateAnimals(dt) {
         const mob = animals[i];
         const data = mob.userData;
         data.turnTimer -= dt;
+        data.blockedTurnCooldown = Math.max(0, (data.blockedTurnCooldown || 0) - dt);
         if (data.turnTimer <= 0) {
             data.turnTimer = 1 + Math.random() * 3;
             const jitter = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
@@ -399,9 +401,12 @@ function updateAnimals(dt) {
 
         if (!moved) {
             data.stuckTime += dt;
-            const turn = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
-            data.direction.lerp(turn, 0.9).normalize();
-            data.turnTimer = 0.2 + Math.random() * 0.4;
+            if (data.blockedTurnCooldown <= 0) {
+                const turn = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+                data.direction.lerp(turn, 0.55).normalize();
+                data.turnTimer = 0.35 + Math.random() * 0.5;
+                data.blockedTurnCooldown = 0.25;
+            }
             if (data.stuckTime > 1.2) {
                 mob.position.x += data.direction.x * 0.25;
                 mob.position.z += data.direction.z * 0.25;
@@ -431,7 +436,10 @@ function updateAnimals(dt) {
             }
         }
 
-        mob.rotation.y = Math.atan2(data.direction.x, data.direction.z);
+        const targetYaw = Math.atan2(data.direction.x, data.direction.z);
+        let yawDelta = targetYaw - mob.rotation.y;
+        yawDelta = Math.atan2(Math.sin(yawDelta), Math.cos(yawDelta));
+        mob.rotation.y += yawDelta * Math.min(1, dt * 8);
         data.legPhase += dt * 8;
         data.legs[0].rotation.x = Math.sin(data.legPhase) * 0.35;
         data.legs[1].rotation.x = Math.sin(data.legPhase + Math.PI) * 0.35;
