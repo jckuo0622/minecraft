@@ -16,7 +16,9 @@ const itemDefs = {
     stone_axe: new BlockItem('stone_axe', '石斧'),
     rope: new BlockItem('rope', '草繩'),
     sandstone: new BlockItem('sandstone', '砂岩'),
-    crafting_table: new BlockItem('crafting_table', '合成台')
+    crafting_table: new BlockItem('crafting_table', '合成台'),
+    coal_ore: new BlockItem('coal_ore', '煤礦'),
+    iron_ore: new BlockItem('iron_ore', '鐵礦')
 };
 
 const itemIconDataUrl = {};
@@ -453,7 +455,7 @@ const hotbar = document.createElement('div');
 hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; flex-wrap:nowrap; width:max-content; gap:6px; background:rgba(0,0,0,0.7); padding:10px; border:4px solid #333; display:none; border-radius:8px;`;
 document.body.appendChild(hotbar);
 
-const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand', 'sandstone', 'crafting_table'];
+const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand', 'sandstone', 'crafting_table', 'coal_ore', 'iron_ore'];
 const slots = [];
 
 function renderHotbar() {

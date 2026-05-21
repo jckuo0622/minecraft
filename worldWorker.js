@@ -16,6 +16,23 @@ function seededRandom(x, z, seed = 1337) {
   return n - Math.floor(n);
 }
 
+
+function addOreVein(blocks, removed, wx, wy, wz, oreType, seedOffset, radius = 1) {
+  const points = [
+    [0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1],
+    [0, 1, 0], [0, -1, 0], [1, 0, 1], [-1, 0, -1]
+  ];
+  for (const [ox, oy, oz] of points) {
+    const x = wx + ox;
+    const y = wy + oy;
+    const z = wz + oz;
+    if (Math.abs(ox) + Math.abs(oy) + Math.abs(oz) > radius + 1) continue;
+    if (removed.has(`${x},${y},${z}`)) continue;
+    if (seededRandom(x + seedOffset, z + seedOffset, y * 17) > 0.62) continue;
+    blocks.push({ x, y, z, type: oreType });
+  }
+}
+
 function buildChunk(cx, cz, removedKeys) {
   const removed = new Set(removedKeys);
   const blocks = [];
@@ -30,6 +47,16 @@ function buildChunk(cx, cz, removedKeys) {
 
       if (removed.has(`${wx},${h},${wz}`)) continue;
       blocks.push({ x: wx, y: h, z: wz, type: isDesert ? 'sand' : 'grass' });
+
+      // 地下礦脈生成（煤礦較淺、鐵礦較深）
+      const coalY = h - 3 - Math.floor(seededRandom(wx + 41, wz + 59) * 6);
+      const ironY = h - 6 - Math.floor(seededRandom(wx + 79, wz + 11) * 7);
+      if (coalY > -18 && seededRandom(wx + 211, wz + 307) < 0.08) {
+        addOreVein(blocks, removed, wx, coalY, wz, 'coal_ore', 701, 1);
+      }
+      if (ironY > -22 && seededRandom(wx + 509, wz + 131) < 0.055) {
+        addOreVein(blocks, removed, wx, ironY, wz, 'iron_ore', 1701, 1);
+      }
 
       if (!isDesert && h >= 0 && seededRandom(wx, wz) < 0.015) {
         const treeH = 3 + Math.floor(seededRandom(wx + 19, wz + 23) * 2);

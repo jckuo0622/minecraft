@@ -65,6 +65,14 @@ export function getMaterials(type) {
         const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#93a54f', '#839544') });
         materials = [mat, mat, mat, mat, mat, mat];
     }
+    else if (type === 'coal_ore') {
+        const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#4b4b4b', '#222222') });
+        materials = [mat, mat, mat, mat, mat, mat];
+    }
+    else if (type === 'iron_ore') {
+        const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#b88f6f', '#8e6d54') });
+        materials = [mat, mat, mat, mat, mat, mat];
+    }
     else if (type === 'crafting_table') {
         const side = new THREE.MeshLambertMaterial({ map: createPixelTexture('#8c6239', '#6f4a2d') });
         const top = new THREE.MeshLambertMaterial({ map: createPixelTexture('#c8a36a', '#b3874f') });
@@ -119,5 +127,7 @@ export const blockIconColors = {
     sandstone: ['#b9b3a3', '#9e9888'],
     rope: ['#93a54f', '#839544'],
     stone_axe: ['#9fa5ad', '#838b95'],
-    crafting_table: ['#8c6239', '#6f4a2d']
+    crafting_table: ['#8c6239', '#6f4a2d'],
+    coal_ore: ['#4b4b4b', '#222222'],
+    iron_ore: ['#b88f6f', '#8e6d54']
 };
