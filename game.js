@@ -15,7 +15,8 @@ const itemDefs = {
     plank: new BlockItem('plank', '木板'),
     stone_axe: new BlockItem('stone_axe', '石斧'),
     rope: new BlockItem('rope', '草繩'),
-    sandstone: new BlockItem('sandstone', '砂岩')
+    sandstone: new BlockItem('sandstone', '砂岩'),
+    crafting_table: new BlockItem('crafting_table', '合成台')
 };
 
 const itemIconDataUrl = {};
@@ -30,6 +31,7 @@ const craftingManager = new CraftingManager(inventory);
 craftingManager.addRecipe(new CraftingRecipe('plank_recipe', '木頭 x1 → 木板 x4', [{ itemId: 'wood', amount: 1 }], { itemId: 'plank', amount: 4 }));
 craftingManager.addRecipe(new CraftingRecipe('axe_recipe', '石頭 x2 + 木頭 x1 → 石斧 x1', [{ itemId: 'stone', amount: 2 }, { itemId: 'wood', amount: 1 }], { itemId: 'stone_axe', amount: 1 }));
 craftingManager.addRecipe(new CraftingRecipe('rope_recipe', '樹葉 x2 → 草繩 x1', [{ itemId: 'leaf', amount: 2 }], { itemId: 'rope', amount: 1 }));
+craftingManager.addRecipe(new CraftingRecipe('crafting_table_recipe', '木板 x4 → 合成台 x1', [{ itemId: 'plank', amount: 4 }], { itemId: 'crafting_table', amount: 1 }));
 craftingManager.addRecipe(new CraftingRecipe('sandstone_recipe', '沙子 x2 + 石頭 x1 → 砂岩 x1', [{ itemId: 'sand', amount: 2 }, { itemId: 'stone', amount: 1 }], { itemId: 'sandstone', amount: 1 }));
 
 const inventoryPanel = document.getElementById('inventory-panel');
@@ -38,10 +40,29 @@ const inventoryHotbarGrid = document.getElementById('inventory-hotbar-grid');
 const craftingMessage = document.getElementById('crafting-message');
 const craftResultEl = document.getElementById('craft-result');
 const quickCraftList = document.getElementById('quick-craft-list');
+const craftGridEl = document.getElementById('craft-grid');
+const craftingTitleEl = document.getElementById('crafting-title');
 let inventoryOpen = false;
+let craftingMode = 'inventory'; // inventory | table
 let openedInventoryFromLock = false;
 let unlockingForInventory = false;
-const craftSlots = [null, null, null, null];
+let craftSlots = Array.from({ length: 4 }, () => null);
+
+
+function setCraftMode(mode) {
+    craftingMode = mode;
+    const size = craftingMode === 'table' ? 3 : 2;
+    craftSlots = Array.from({ length: size * size }, () => null);
+    craftGridEl.style.gridTemplateColumns = `repeat(${size},42px)`;
+    craftingTitleEl.textContent = `${size}x${size}`;
+    craftGridEl.innerHTML = '';
+    for (let i = 0; i < craftSlots.length; i++) {
+        const el = document.createElement('div');
+        el.className = 'slot craft-slot';
+        el.dataset.cslot = String(i);
+        craftGridEl.appendChild(el);
+    }
+}
 
 function setCraftMessage(msg) {
     craftingMessage.textContent = msg;
@@ -76,6 +97,30 @@ function renderInventory() {
 }
 
 function getCraftResult() {
+    const size = Math.sqrt(craftSlots.length);
+
+    if (size === 3) {
+        const isPlankAt = (r, c) => {
+            const slot = craftSlots[r * 3 + c];
+            return slot && slot.itemId === 'plank' && slot.count >= 1;
+        };
+        for (let r = 0; r < 2; r++) {
+            for (let c = 0; c < 2; c++) {
+                const matches2x2 = isPlankAt(r, c) && isPlankAt(r, c + 1) && isPlankAt(r + 1, c) && isPlankAt(r + 1, c + 1);
+                if (!matches2x2) continue;
+                let otherCount = 0;
+                for (let i = 0; i < craftSlots.length; i++) {
+                    const rr = Math.floor(i / 3), cc = i % 3;
+                    const inSquare = rr >= r && rr <= r + 1 && cc >= c && cc <= c + 1;
+                    if (!inSquare && craftSlots[i]) otherCount++;
+                }
+                if (otherCount === 0) {
+                    return { id: 'crafting_table_from_grid', output: { itemId: 'crafting_table', amount: 1 } };
+                }
+            }
+        }
+    }
+
     const counts = new Map();
     for (const slot of craftSlots) {
         if (!slot) continue;
@@ -180,7 +225,8 @@ function renderQuickCraft() {
     });
 }
 
-function toggleInventory() {
+function toggleInventory(mode = 'inventory') {
+    if (!inventoryOpen) setCraftMode(mode);
     inventoryOpen = !inventoryOpen;
 
     if (inventoryOpen) {
@@ -250,137 +296,6 @@ const dropSystem = createDropSystem({
     },
     getPlayerFeetY: () => camera.position.y - currentHeight
 });
-
-
-const animals = [];
-const spawnedAnimalCells = new Set();
-
-function animalCellKey(x, z) {
-    return `${Math.floor(x / 12)},${Math.floor(z / 12)}`;
-}
-
-function spawnAnimalsNearPlayer(maxAnimals = 18) {
-    if (animals.length >= maxAnimals) return;
-    const px = Math.floor(camera.position.x);
-    const pz = Math.floor(camera.position.z);
-    for (let i = 0; i < 2 && animals.length < maxAnimals; i++) {
-        const rx = px + Math.floor((Math.random() - 0.5) * 44);
-        const rz = pz + Math.floor((Math.random() - 0.5) * 44);
-        const cell = animalCellKey(rx, rz);
-        if (spawnedAnimalCells.has(cell)) continue;
-        const y = getSurfaceHeightApprox(rx, rz) + 0.01;
-        if (y < -8) continue;
-        const type = chooseAnimalType(rx, rz);
-        const mob = createAnimal(type, rx + 0.5, y, rz + 0.5);
-        scene.add(mob);
-        animals.push(mob);
-        spawnedAnimalCells.add(cell);
-    }
-}
-
-function updateAnimals(dt) {
-    for (let i = animals.length - 1; i >= 0; i--) {
-        const mob = animals[i];
-        const data = mob.userData;
-        data.turnTimer -= dt;
-        data.blockedTurnCooldown = Math.max(0, (data.blockedTurnCooldown || 0) - dt);
-        if (data.turnTimer <= 0) {
-            data.turnTimer = 1 + Math.random() * 3;
-            const jitter = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
-            data.direction.lerp(jitter, 0.65).normalize();
-        }
-
-        const stepX = data.direction.x * data.walkSpeed * dt;
-        const stepZ = data.direction.z * data.walkSpeed * dt;
-        const nextX = mob.position.x + stepX;
-        const nextZ = mob.position.z + stepZ;
-        const nearby = getNearbyBlocks(mob.position.x, mob.position.z, 3);
-
-        const currentFeetY = mob.position.y + 0.15;
-        const currentGround = getGroundAt(mob.position.x, mob.position.z, nearby, 0.25, currentFeetY);
-        const nextGround = getGroundAt(nextX, nextZ, nearby, 0.25, currentFeetY);
-
-        const blockedX = checkWall(nextX, mob.position.y + 1.0, mob.position.z, nearby, 0.24);
-        const blockedZ = checkWall(mob.position.x, mob.position.y + 1.0, nextZ, nearby, 0.24);
-        const dropTooHigh = currentGround !== -999 && nextGround !== -999 && (currentGround - nextGround) > 1.1;
-        const voidAhead = currentGround !== -999 && nextGround === -999;
-        const steepDropAhead = dropTooHigh || voidAhead;
-
-        let moved = false;
-        if (!blockedX && !steepDropAhead) {
-            mob.position.x = nextX;
-            moved = true;
-        }
-        if (!blockedZ && !steepDropAhead) {
-            mob.position.z = nextZ;
-            moved = true;
-        }
-
-        if (!moved) {
-            data.stuckTime += dt;
-            if (data.blockedTurnCooldown <= 0) {
-                const turn = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
-                data.direction.lerp(turn, 0.55).normalize();
-                data.turnTimer = 0.35 + Math.random() * 0.5;
-                data.blockedTurnCooldown = 0.25;
-            }
-            if (data.stuckTime > 1.2) {
-                const nudgeX = mob.position.x + data.direction.x * 0.25;
-                const nudgeZ = mob.position.z + data.direction.z * 0.25;
-                const nudgeBlocked = checkWall(nudgeX, mob.position.y + 1.0, nudgeZ, nearby, 0.24);
-                const nudgeGround = getGroundAt(nudgeX, nudgeZ, nearby, 0.25, mob.position.y + 0.15);
-                if (!nudgeBlocked && nudgeGround !== -999) {
-                    mob.position.x = nudgeX;
-                    mob.position.z = nudgeZ;
-                }
-                data.stuckTime = 0;
-            }
-        } else {
-            data.stuckTime = 0;
-        }
-
-        data.velocityY -= 20 * dt;
-        const nearbyAfterMove = getNearbyBlocks(mob.position.x, mob.position.z, 3);
-        const feetY = mob.position.y + 0.15;
-        const ground = getGroundAt(mob.position.x, mob.position.z, nearbyAfterMove, 0.25, feetY);
-        if (ground !== -999) {
-            const nextY = mob.position.y + data.velocityY * dt;
-            mob.position.y = Math.max(nextY, ground);
-            if (mob.position.y <= ground + 0.001) data.velocityY = 0;
-        } else {
-            mob.position.y += data.velocityY * dt;
-            const fallbackGround = getSurfaceHeightApprox(Math.round(mob.position.x), Math.round(mob.position.z));
-            if (mob.position.y < fallbackGround - 2) {
-                mob.position.y = fallbackGround;
-                data.velocityY = 0;
-            }
-            if (mob.position.y < -25) {
-                mob.position.x = Math.round(mob.position.x) + 0.5;
-                mob.position.z = Math.round(mob.position.z) + 0.5;
-                mob.position.y = getSurfaceHeightApprox(Math.round(mob.position.x), Math.round(mob.position.z));
-                data.velocityY = 0;
-            }
-        }
-
-        const targetYaw = Math.atan2(data.direction.x, data.direction.z);
-        let yawDelta = targetYaw - mob.rotation.y;
-        yawDelta = Math.atan2(Math.sin(yawDelta), Math.cos(yawDelta));
-        mob.rotation.y += yawDelta * Math.min(1, dt * 8);
-        data.legPhase += dt * 8;
-        data.legs[0].rotation.x = Math.sin(data.legPhase) * 0.35;
-        data.legs[1].rotation.x = Math.sin(data.legPhase + Math.PI) * 0.35;
-        data.legs[2].rotation.x = Math.sin(data.legPhase + Math.PI) * 0.35;
-        data.legs[3].rotation.x = Math.sin(data.legPhase) * 0.35;
-
-        const dx = mob.position.x - camera.position.x;
-        const dz = mob.position.z - camera.position.z;
-        if (dx * dx + dz * dz > 110 * 110) {
-            scene.remove(mob);
-            animals.splice(i, 1);
-            spawnedAnimalCells.delete(animalCellKey(mob.position.x, mob.position.z));
-        }
-    }
-}
 
 function posKey(x, y, z) { return `${x},${y},${z}`; }
 function colKey(x, z) { return `${x},${z}`; }
@@ -538,7 +453,7 @@ const hotbar = document.createElement('div');
 hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; flex-wrap:nowrap; width:max-content; gap:6px; background:rgba(0,0,0,0.7); padding:10px; border:4px solid #333; display:none; border-radius:8px;`;
 document.body.appendChild(hotbar);
 
-const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand', 'sandstone'];
+const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand', 'sandstone', 'crafting_table'];
 const slots = [];
 
 function renderHotbar() {
@@ -624,7 +539,7 @@ document.addEventListener('keydown', (e) => {
         if (val >= 0 && val < 9) { selectedIdx = val; updateSelection(val); }
     }
     if (e.code === 'KeyE') {
-        toggleInventory();
+        toggleInventory('inventory');
         return;
     }
     if (e.code === 'Space' && canJump) { velocity.y += 9.5; canJump = false; }
@@ -655,7 +570,11 @@ window.addEventListener('mousedown', (e) => {
             dropSystem.spawnDrop(blockType, pos.x, pos.y, pos.z);
             removeBlockMesh(intersect.object);
             updateNeighbors(pos.x, pos.y, pos.z);
-        } else if (e.button === 2) { // 建造
+        } else if (e.button === 2) { // 建造/使用
+            if (intersect.object.userData.blockType === 'crafting_table') {
+                toggleInventory('table');
+                return;
+            }
             const selectedSlot = inventory.getSlots(27, 36)[selectedIdx];
             if (!selectedSlot || !blockTypes.includes(selectedSlot.itemId)) return;
             const b = new THREE.Mesh(boxGeo, getMaterials(selectedSlot.itemId));

@@ -65,6 +65,11 @@ export function getMaterials(type) {
         const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#93a54f', '#839544') });
         materials = [mat, mat, mat, mat, mat, mat];
     }
+    else if (type === 'crafting_table') {
+        const side = new THREE.MeshLambertMaterial({ map: createPixelTexture('#8c6239', '#6f4a2d') });
+        const top = new THREE.MeshLambertMaterial({ map: createPixelTexture('#c8a36a', '#b3874f') });
+        materials = [side, side, top, side, side, side];
+    }
     else if (type === 'stone_axe') {
         const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#9fa5ad', '#838b95') });
         materials = [mat, mat, mat, mat, mat, mat];
@@ -113,5 +118,6 @@ export const blockIconColors = {
     plank: ['#b88650', '#a57442'],
     sandstone: ['#b9b3a3', '#9e9888'],
     rope: ['#93a54f', '#839544'],
-    stone_axe: ['#9fa5ad', '#838b95']
+    stone_axe: ['#9fa5ad', '#838b95'],
+    crafting_table: ['#8c6239', '#6f4a2d']
 };
