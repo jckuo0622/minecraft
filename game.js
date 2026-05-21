@@ -17,8 +17,10 @@ const itemDefs = {
     rope: new BlockItem('rope', '草繩'),
     sandstone: new BlockItem('sandstone', '砂岩'),
     crafting_table: new BlockItem('crafting_table', '合成台'),
+    furnace: new BlockItem('furnace', '熔爐'),
     coal_ore: new BlockItem('coal_ore', '煤礦'),
-    iron_ore: new BlockItem('iron_ore', '鐵礦')
+    iron_ore: new BlockItem('iron_ore', '鐵礦'),
+    iron: new BlockItem('iron', '鐵錠')
 };
 
 const itemIconDataUrl = {};
@@ -34,6 +36,7 @@ craftingManager.addRecipe(new CraftingRecipe('plank_recipe', '木頭 x1 → 木�
 craftingManager.addRecipe(new CraftingRecipe('axe_recipe', '石頭 x2 + 木頭 x1 → 石斧 x1', [{ itemId: 'stone', amount: 2 }, { itemId: 'wood', amount: 1 }], { itemId: 'stone_axe', amount: 1 }));
 craftingManager.addRecipe(new CraftingRecipe('rope_recipe', '樹葉 x2 → 草繩 x1', [{ itemId: 'leaf', amount: 2 }], { itemId: 'rope', amount: 1 }));
 craftingManager.addRecipe(new CraftingRecipe('crafting_table_recipe', '木板 x4 → 合成台 x1', [{ itemId: 'plank', amount: 4 }], { itemId: 'crafting_table', amount: 1 }));
+craftingManager.addRecipe(new CraftingRecipe('furnace_recipe', '石頭 x8 → 熔爐 x1', [{ itemId: 'stone', amount: 8 }], { itemId: 'furnace', amount: 1 }));
 craftingManager.addRecipe(new CraftingRecipe('sandstone_recipe', '沙子 x2 + 石頭 x1 → 砂岩 x1', [{ itemId: 'sand', amount: 2 }, { itemId: 'stone', amount: 1 }], { itemId: 'sandstone', amount: 1 }));
 
 const inventoryPanel = document.getElementById('inventory-panel');
@@ -44,16 +47,25 @@ const craftResultEl = document.getElementById('craft-result');
 const quickCraftList = document.getElementById('quick-craft-list');
 const craftGridEl = document.getElementById('craft-grid');
 const craftingTitleEl = document.getElementById('crafting-title');
+const craftingAreaEl = document.getElementById('crafting-area');
+const furnaceAreaEl = document.getElementById('furnace-area');
+const furnaceInputEl = document.getElementById('furnace-input');
+const furnaceFuelEl = document.getElementById('furnace-fuel');
+const furnaceOutputEl = document.getElementById('furnace-output');
 let inventoryOpen = false;
-let craftingMode = 'inventory'; // inventory | table
+let craftingMode = 'inventory'; // inventory | table | furnace
 let openedInventoryFromLock = false;
 let unlockingForInventory = false;
 let craftSlots = Array.from({ length: 4 }, () => null);
+let activeFurnaceKey = null;
+const furnaceStates = new Map();
 
 
 function setCraftMode(mode) {
     craftingMode = mode;
     const size = craftingMode === 'table' ? 3 : 2;
+    craftingAreaEl.style.display = craftingMode === 'furnace' ? 'none' : 'block';
+    furnaceAreaEl.style.display = craftingMode === 'furnace' ? 'block' : 'none';
     craftSlots = Array.from({ length: size * size }, () => null);
     craftGridEl.style.gridTemplateColumns = `repeat(${size},42px)`;
     craftingTitleEl.textContent = `${size}x${size}`;
@@ -64,6 +76,37 @@ function setCraftMode(mode) {
         el.dataset.cslot = String(i);
         craftGridEl.appendChild(el);
     }
+}
+
+
+function getFurnaceState(key) {
+    if (!furnaceStates.has(key)) furnaceStates.set(key, { input: null, fuel: null, output: null, progress: 0, burnTime: 0 });
+    return furnaceStates.get(key);
+}
+
+function fuelTime(itemId) {
+    if (itemId === 'coal_ore') return 12;
+    if (itemId === 'wood' || itemId === 'plank') return 5;
+    return 0;
+}
+
+function smeltResult(itemId) {
+    if (itemId === 'wood') return 'coal_ore';
+    if (itemId === 'iron_ore') return 'iron';
+    return null;
+}
+
+function renderFurnaceSlot(el, slot) {
+    if (!slot) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="mc-item-icon" style="background-image:url(${itemIconDataUrl[slot.itemId] || ''})"></div><span style="position:absolute;right:4px;bottom:2px;color:white;font-size:10px;">x${slot.count}</span>`;
+}
+
+function renderFurnace() {
+    if (!activeFurnaceKey) return;
+    const f = getFurnaceState(activeFurnaceKey);
+    renderFurnaceSlot(furnaceInputEl, f.input);
+    renderFurnaceSlot(furnaceFuelEl, f.fuel);
+    renderFurnaceSlot(furnaceOutputEl, f.output);
 }
 
 function setCraftMessage(msg) {
@@ -161,6 +204,7 @@ function renderCrafting() {
             renderHotbar();
             renderQuickCraft();
             renderCrafting();
+        renderFurnace();
             renderQuickCraft();
         };
         el.onclick = () => {
@@ -240,6 +284,7 @@ function toggleInventory(mode = 'inventory') {
         inventoryPanel.classList.add('open');
         renderInventory();
         renderCrafting();
+        renderFurnace();
         renderHotbar();
         renderQuickCraft();
         setCraftMessage('');
@@ -455,7 +500,7 @@ const hotbar = document.createElement('div');
 hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; flex-wrap:nowrap; width:max-content; gap:6px; background:rgba(0,0,0,0.7); padding:10px; border:4px solid #333; display:none; border-radius:8px;`;
 document.body.appendChild(hotbar);
 
-const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand', 'sandstone', 'crafting_table', 'coal_ore', 'iron_ore'];
+const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand', 'sandstone', 'crafting_table', 'coal_ore', 'iron_ore', 'furnace'];
 const slots = [];
 
 function renderHotbar() {
@@ -577,6 +622,11 @@ window.addEventListener('mousedown', (e) => {
                 toggleInventory('table');
                 return;
             }
+            if (intersect.object.userData.blockType === 'furnace') {
+                activeFurnaceKey = `${intersect.object.position.x},${intersect.object.position.y},${intersect.object.position.z}`;
+                toggleInventory('furnace');
+                return;
+            }
             const selectedSlot = inventory.getSlots(27, 36)[selectedIdx];
             if (!selectedSlot || !blockTypes.includes(selectedSlot.itemId)) return;
             const b = new THREE.Mesh(boxGeo, getMaterials(selectedSlot.itemId));
@@ -593,6 +643,33 @@ window.addEventListener('mousedown', (e) => {
     }
 });
 window.addEventListener('contextmenu', e => e.preventDefault());
+
+
+[furnaceInputEl, furnaceFuelEl].forEach((el, idx) => {
+    el.addEventListener('click', () => {
+        if (!activeFurnaceKey || !inventoryOpen || craftingMode !== 'furnace') return;
+        const selected = inventory.getSlots(27, 36)[selectedIdx];
+        if (!selected) return;
+        const f = getFurnaceState(activeFurnaceKey);
+        const target = idx === 0 ? 'input' : 'fuel';
+        if (!f[target]) f[target] = { itemId: selected.itemId, count: 0 };
+        if (f[target].itemId !== selected.itemId) return;
+        inventory.remove(selected.itemId, 1);
+        f[target].count += 1;
+        renderInventory(); renderHotbar(); renderFurnace();
+    });
+});
+
+furnaceOutputEl.addEventListener('click', () => {
+    if (!activeFurnaceKey || !inventoryOpen || craftingMode !== 'furnace') return;
+    const f = getFurnaceState(activeFurnaceKey);
+    if (!f.output) return;
+    inventory.add(f.output.itemId, 1, true);
+    f.output.count -= 1;
+    if (f.output.count <= 0) f.output = null;
+    renderInventory(); renderHotbar(); renderFurnace();
+});
+
 
 // --- E. 燈光與遊戲循環 ---
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -614,6 +691,30 @@ function animate() {
         dropSystem.updateDrops(dt);
         animalSystem.spawnAnimalsNearPlayer();
         animalSystem.updateAnimals(dt);
+        for (const f of furnaceStates.values()) {
+            if (f.burnTime > 0) f.burnTime -= dt;
+            const resultId = f.input ? smeltResult(f.input.itemId) : null;
+            if (f.input && resultId && (!f.output || f.output.itemId === resultId)) {
+                if (f.burnTime <= 0 && f.fuel && fuelTime(f.fuel.itemId) > 0) {
+                    f.fuel.count -= 1;
+                    f.burnTime += fuelTime(f.fuel.itemId);
+                    if (f.fuel.count <= 0) f.fuel = null;
+                }
+                if (f.burnTime > 0) {
+                    f.progress += dt;
+                    if (f.progress >= 3.5) {
+                        f.progress = 0;
+                        f.input.count -= 1;
+                        if (f.input.count <= 0) f.input = null;
+                        if (!f.output) f.output = { itemId: resultId, count: 0 };
+                        f.output.count += 1;
+                    }
+                }
+            } else {
+                f.progress = 0;
+            }
+        }
+        if (inventoryOpen && craftingMode === "furnace") renderFurnace();
 
         const targetH = isCrouching ? 1.2 : 1.7;
         currentHeight += (targetH - currentHeight) * 0.2;

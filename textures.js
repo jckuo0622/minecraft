@@ -65,6 +65,11 @@ export function getMaterials(type) {
         const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#93a54f', '#839544') });
         materials = [mat, mat, mat, mat, mat, mat];
     }
+    else if (type === 'furnace') {
+        const side = new THREE.MeshLambertMaterial({ map: createPixelTexture('#6f6f6f', '#4e4e4e') });
+        const top = new THREE.MeshLambertMaterial({ map: createPixelTexture('#8a8a8a', '#666666') });
+        materials = [side, side, top, side, side, side];
+    }
     else if (type === 'coal_ore') {
         const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#4b4b4b', '#222222') });
         materials = [mat, mat, mat, mat, mat, mat];
@@ -98,6 +103,14 @@ export function getItemIconCanvas(type) {
     canvas.width = 16; canvas.height = 16;
     const ctx = canvas.getContext('2d');
 
+    if (type === 'iron') {
+        ctx.fillStyle = '#c8c8c8';
+        ctx.fillRect(3, 5, 10, 6);
+        ctx.fillStyle = '#9f9f9f';
+        ctx.fillRect(4, 6, 8, 4);
+        return canvas;
+    }
+
     if (type === 'stone_axe') {
         // 石斧頭
         ctx.fillStyle = '#9fa5ad';
@@ -128,6 +141,8 @@ export const blockIconColors = {
     rope: ['#93a54f', '#839544'],
     stone_axe: ['#9fa5ad', '#838b95'],
     crafting_table: ['#8c6239', '#6f4a2d'],
+    furnace: ['#6f6f6f', '#4e4e4e'],
     coal_ore: ['#4b4b4b', '#222222'],
-    iron_ore: ['#b88f6f', '#8e6d54']
+    iron_ore: ['#b88f6f', '#8e6d54'],
+    iron: ['#c8c8c8', '#9f9f9f']
 };
