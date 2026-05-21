@@ -3,6 +3,8 @@ import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examp
 import { getMaterials, getPixelCanvas, blockIconColors, getItemIconCanvas } from './textures.js';
 import { getGroundAt, checkWall } from './physics.js';
 import { BlockItem, Inventory, CraftingRecipe, CraftingManager } from './inventory.js';
+import { createAnimalSystem } from './animals.js';
+import { createDropSystem } from './drops.js';
 
 
 const itemDefs = {
@@ -229,47 +231,25 @@ const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const worldWorker = new Worker('./worldWorker.js', { type: 'module' });
 const pendingChunks = new Set();
 const chunkBuildQueue = [];
-const droppedItems = [];
+const animalSystem = createAnimalSystem({
+    scene,
+    camera,
+    getNearbyBlocks,
+    getSurfaceHeightApprox
+});
 
-function spawnDrop(itemId, x, y, z) {
-    const drop = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), getMaterials(itemId));
-    drop.position.set(x, y + 0.6, z);
-    drop.userData.itemId = itemId;
-    drop.userData.vy = 0;
-    scene.add(drop);
-    droppedItems.push(drop);
-}
-
-function updateDrops(dt) {
-    for (let i = droppedItems.length - 1; i >= 0; i--) {
-        const drop = droppedItems[i];
-        drop.userData.vy -= 18 * dt;
-        drop.position.y += drop.userData.vy * dt;
-
-        const nearby = getNearbyBlocks(drop.position.x, drop.position.z, 2);
-        const groundTop = getGroundAt(drop.position.x, drop.position.z, nearby, 0.2, drop.position.y + 0.5);
-        if (groundTop !== -999 && drop.position.y <= groundTop + 0.18) {
-            drop.position.y = groundTop + 0.18;
-            drop.userData.vy = 0;
-        }
-        if (drop.position.y < -20) {
-            drop.position.y = -20;
-            drop.userData.vy = 0;
-        }
-
-        const dx = drop.position.x - camera.position.x;
-        const dy = (drop.position.y + 0.5) - (camera.position.y - currentHeight + 0.6);
-        const dz = drop.position.z - camera.position.z;
-        if ((dx * dx + dy * dy + dz * dz) < 2.25) {
-            inventory.add(drop.userData.itemId, 1, true);
-            renderHotbar();
-            if (inventoryOpen) { renderInventory(); renderCrafting(); }
-            scene.remove(drop);
-            droppedItems.splice(i, 1);
-        }
-    }
-}
-
+const dropSystem = createDropSystem({
+    scene,
+    camera,
+    inventory,
+    getNearbyBlocks,
+    getMaterials,
+    onInventoryUpdated: () => {
+        renderHotbar();
+        if (inventoryOpen) { renderInventory(); renderCrafting(); }
+    },
+    getPlayerFeetY: () => camera.position.y - currentHeight
+});
 
 function posKey(x, y, z) { return `${x},${y},${z}`; }
 function colKey(x, z) { return `${x},${z}`; }
@@ -541,7 +521,7 @@ window.addEventListener('mousedown', (e) => {
         if (e.button === 0) { // 挖掘
             removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
             const blockType = intersect.object.userData.blockType || 'stone';
-            spawnDrop(blockType, pos.x, pos.y, pos.z);
+            dropSystem.spawnDrop(blockType, pos.x, pos.y, pos.z);
             removeBlockMesh(intersect.object);
             updateNeighbors(pos.x, pos.y, pos.z);
         } else if (e.button === 2) { // 建造
@@ -579,7 +559,9 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
         prevT = t;
-        updateDrops(dt);
+        dropSystem.updateDrops(dt);
+        animalSystem.spawnAnimalsNearPlayer();
+        animalSystem.updateAnimals(dt);
 
         const targetH = isCrouching ? 1.2 : 1.7;
         currentHeight += (targetH - currentHeight) * 0.2;
