@@ -3,6 +3,8 @@ import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examp
 import { getMaterials, getPixelCanvas, blockIconColors, getItemIconCanvas } from './textures.js';
 import { getGroundAt, checkWall } from './physics.js';
 import { BlockItem, Inventory, CraftingRecipe, CraftingManager } from './inventory.js';
+import { createAnimalSystem } from './animals.js';
+import { createDropSystem } from './drops.js';
 
 
 const itemDefs = {
@@ -229,110 +231,25 @@ const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const worldWorker = new Worker('./worldWorker.js', { type: 'module' });
 const pendingChunks = new Set();
 const chunkBuildQueue = [];
-const droppedItems = [];
+const animalSystem = createAnimalSystem({
+    scene,
+    camera,
+    getNearbyBlocks,
+    getSurfaceHeightApprox
+});
 
-const animalTypes = {
-    pig: { name: '豬', body: ['#f7a9b8', '#e892a4'], accent: '#d97b8e', spawnWeight: 0.4 },
-    cow: { name: '牛', body: ['#5b4638', '#463527'], accent: '#f4f0e8', spawnWeight: 0.3 },
-    sheep: { name: '羊', body: ['#efefef', '#d8d8d8'], accent: '#555555', spawnWeight: 0.3 }
-};
-
-function chooseAnimalType(x, z) {
-    const roll = (Math.sin(x * 0.17 + z * 0.21) + 1) * 0.5;
-    let acc = 0;
-    for (const [type, cfg] of Object.entries(animalTypes)) {
-        acc += cfg.spawnWeight;
-        if (roll <= acc) return type;
-    }
-    return 'pig';
-}
-
-function createAnimal(animalType, x, y, z) {
-    const config = animalTypes[animalType] || animalTypes.pig;
-    const mob = new THREE.Group();
-
-    const bodyTex = new THREE.CanvasTexture(getPixelCanvas(config.body[0], config.body[1]));
-    bodyTex.magFilter = THREE.NearestFilter;
-    bodyTex.minFilter = THREE.NearestFilter;
-    bodyTex.generateMipmaps = false;
-    const bodyMat = new THREE.MeshLambertMaterial({ map: bodyTex });
-
-    const accentMat = new THREE.MeshLambertMaterial({ color: config.accent });
-
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.6, 0.45), bodyMat);
-    body.position.y = 0.65;
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.36), bodyMat);
-    head.position.set(0, 0.74, 0.42);
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.09), accentMat);
-    nose.position.set(0, 0.7, 0.63);
-
-    const legGeo = new THREE.BoxGeometry(0.16, 0.45, 0.16);
-    const legs = [
-        [-0.28, 0.23, 0.15], [0.28, 0.23, 0.15],
-        [-0.28, 0.23, -0.15], [0.28, 0.23, -0.15]
-    ].map(([lx, ly, lz]) => {
-        const leg = new THREE.Mesh(legGeo, bodyMat);
-        leg.position.set(lx, ly, lz);
-        mob.add(leg);
-        return leg;
-    });
-
-    mob.add(body, head, nose);
-    mob.position.set(x, y, z);
-    mob.userData = {
-        animalType,
-        velocityY: 0,
-        direction: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(),
-        turnTimer: 1 + Math.random() * 3,
-        walkSpeed: 0.8 + Math.random() * 0.5,
-        legPhase: Math.random() * Math.PI * 2,
-        stuckTime: 0,
-        blockedTurnCooldown: 0,
-        legs,
-        homeY: y
-    };
-    return mob;
-}
-
-function spawnDrop(itemId, x, y, z) {
-    const drop = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), getMaterials(itemId));
-    drop.position.set(x, y + 0.6, z);
-    drop.userData.itemId = itemId;
-    drop.userData.vy = 0;
-    scene.add(drop);
-    droppedItems.push(drop);
-}
-
-function updateDrops(dt) {
-    for (let i = droppedItems.length - 1; i >= 0; i--) {
-        const drop = droppedItems[i];
-        drop.userData.vy -= 18 * dt;
-        drop.position.y += drop.userData.vy * dt;
-
-        const nearby = getNearbyBlocks(drop.position.x, drop.position.z, 2);
-        const groundTop = getGroundAt(drop.position.x, drop.position.z, nearby, 0.2, drop.position.y + 0.5);
-        if (groundTop !== -999 && drop.position.y <= groundTop + 0.18) {
-            drop.position.y = groundTop + 0.18;
-            drop.userData.vy = 0;
-        }
-        if (drop.position.y < -20) {
-            drop.position.y = -20;
-            drop.userData.vy = 0;
-        }
-
-        const dx = drop.position.x - camera.position.x;
-        const dy = (drop.position.y + 0.5) - (camera.position.y - currentHeight + 0.6);
-        const dz = drop.position.z - camera.position.z;
-        if ((dx * dx + dy * dy + dz * dz) < 2.25) {
-            inventory.add(drop.userData.itemId, 1, true);
-            renderHotbar();
-            if (inventoryOpen) { renderInventory(); renderCrafting(); }
-            scene.remove(drop);
-            droppedItems.splice(i, 1);
-        }
-    }
-}
-
+const dropSystem = createDropSystem({
+    scene,
+    camera,
+    inventory,
+    getNearbyBlocks,
+    getMaterials,
+    onInventoryUpdated: () => {
+        renderHotbar();
+        if (inventoryOpen) { renderInventory(); renderCrafting(); }
+    },
+    getPlayerFeetY: () => camera.position.y - currentHeight
+});
 
 
 const animals = [];
@@ -735,7 +652,7 @@ window.addEventListener('mousedown', (e) => {
         if (e.button === 0) { // 挖掘
             removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
             const blockType = intersect.object.userData.blockType || 'stone';
-            spawnDrop(blockType, pos.x, pos.y, pos.z);
+            dropSystem.spawnDrop(blockType, pos.x, pos.y, pos.z);
             removeBlockMesh(intersect.object);
             updateNeighbors(pos.x, pos.y, pos.z);
         } else if (e.button === 2) { // 建造
@@ -773,9 +690,9 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
         prevT = t;
-        updateDrops(dt);
-        spawnAnimalsNearPlayer();
-        updateAnimals(dt);
+        dropSystem.updateDrops(dt);
+        animalSystem.spawnAnimalsNearPlayer();
+        animalSystem.updateAnimals(dt);
 
         const targetH = isCrouching ? 1.2 : 1.7;
         currentHeight += (targetH - currentHeight) * 0.2;
