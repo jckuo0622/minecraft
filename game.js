@@ -3,6 +3,8 @@ import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examp
 import { getMaterials, getPixelCanvas, blockIconColors, getItemIconCanvas } from './textures.js';
 import { getGroundAt, checkWall } from './physics.js';
 import { BlockItem, Inventory, CraftingRecipe, CraftingManager } from './inventory.js';
+import { createAnimalSystem } from './animals.js';
+import { createDropSystem } from './drops.js';
 
 
 const itemDefs = {
@@ -13,7 +15,10 @@ const itemDefs = {
     plank: new BlockItem('plank', '木板'),
     stone_axe: new BlockItem('stone_axe', '石斧'),
     rope: new BlockItem('rope', '草繩'),
-    sandstone: new BlockItem('sandstone', '砂岩')
+    sandstone: new BlockItem('sandstone', '砂岩'),
+    crafting_table: new BlockItem('crafting_table', '合成台'),
+    coal_ore: new BlockItem('coal_ore', '煤礦'),
+    iron_ore: new BlockItem('iron_ore', '鐵礦')
 };
 
 const itemIconDataUrl = {};
@@ -28,6 +33,7 @@ const craftingManager = new CraftingManager(inventory);
 craftingManager.addRecipe(new CraftingRecipe('plank_recipe', '木頭 x1 → 木板 x4', [{ itemId: 'wood', amount: 1 }], { itemId: 'plank', amount: 4 }));
 craftingManager.addRecipe(new CraftingRecipe('axe_recipe', '石頭 x2 + 木頭 x1 → 石斧 x1', [{ itemId: 'stone', amount: 2 }, { itemId: 'wood', amount: 1 }], { itemId: 'stone_axe', amount: 1 }));
 craftingManager.addRecipe(new CraftingRecipe('rope_recipe', '樹葉 x2 → 草繩 x1', [{ itemId: 'leaf', amount: 2 }], { itemId: 'rope', amount: 1 }));
+craftingManager.addRecipe(new CraftingRecipe('crafting_table_recipe', '木板 x4 → 合成台 x1', [{ itemId: 'plank', amount: 4 }], { itemId: 'crafting_table', amount: 1 }));
 craftingManager.addRecipe(new CraftingRecipe('sandstone_recipe', '沙子 x2 + 石頭 x1 → 砂岩 x1', [{ itemId: 'sand', amount: 2 }, { itemId: 'stone', amount: 1 }], { itemId: 'sandstone', amount: 1 }));
 
 const inventoryPanel = document.getElementById('inventory-panel');
@@ -36,10 +42,29 @@ const inventoryHotbarGrid = document.getElementById('inventory-hotbar-grid');
 const craftingMessage = document.getElementById('crafting-message');
 const craftResultEl = document.getElementById('craft-result');
 const quickCraftList = document.getElementById('quick-craft-list');
+const craftGridEl = document.getElementById('craft-grid');
+const craftingTitleEl = document.getElementById('crafting-title');
 let inventoryOpen = false;
+let craftingMode = 'inventory'; // inventory | table
 let openedInventoryFromLock = false;
 let unlockingForInventory = false;
-const craftSlots = [null, null, null, null];
+let craftSlots = Array.from({ length: 4 }, () => null);
+
+
+function setCraftMode(mode) {
+    craftingMode = mode;
+    const size = craftingMode === 'table' ? 3 : 2;
+    craftSlots = Array.from({ length: size * size }, () => null);
+    craftGridEl.style.gridTemplateColumns = `repeat(${size},42px)`;
+    craftingTitleEl.textContent = `${size}x${size}`;
+    craftGridEl.innerHTML = '';
+    for (let i = 0; i < craftSlots.length; i++) {
+        const el = document.createElement('div');
+        el.className = 'slot craft-slot';
+        el.dataset.cslot = String(i);
+        craftGridEl.appendChild(el);
+    }
+}
 
 function setCraftMessage(msg) {
     craftingMessage.textContent = msg;
@@ -74,6 +99,30 @@ function renderInventory() {
 }
 
 function getCraftResult() {
+    const size = Math.sqrt(craftSlots.length);
+
+    if (size === 3) {
+        const isPlankAt = (r, c) => {
+            const slot = craftSlots[r * 3 + c];
+            return slot && slot.itemId === 'plank' && slot.count >= 1;
+        };
+        for (let r = 0; r < 2; r++) {
+            for (let c = 0; c < 2; c++) {
+                const matches2x2 = isPlankAt(r, c) && isPlankAt(r, c + 1) && isPlankAt(r + 1, c) && isPlankAt(r + 1, c + 1);
+                if (!matches2x2) continue;
+                let otherCount = 0;
+                for (let i = 0; i < craftSlots.length; i++) {
+                    const rr = Math.floor(i / 3), cc = i % 3;
+                    const inSquare = rr >= r && rr <= r + 1 && cc >= c && cc <= c + 1;
+                    if (!inSquare && craftSlots[i]) otherCount++;
+                }
+                if (otherCount === 0) {
+                    return { id: 'crafting_table_from_grid', output: { itemId: 'crafting_table', amount: 1 } };
+                }
+            }
+        }
+    }
+
     const counts = new Map();
     for (const slot of craftSlots) {
         if (!slot) continue;
@@ -178,7 +227,8 @@ function renderQuickCraft() {
     });
 }
 
-function toggleInventory() {
+function toggleInventory(mode = 'inventory') {
+    if (!inventoryOpen) setCraftMode(mode);
     inventoryOpen = !inventoryOpen;
 
     if (inventoryOpen) {
@@ -229,47 +279,25 @@ const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const worldWorker = new Worker('./worldWorker.js', { type: 'module' });
 const pendingChunks = new Set();
 const chunkBuildQueue = [];
-const droppedItems = [];
+const animalSystem = createAnimalSystem({
+    scene,
+    camera,
+    getNearbyBlocks,
+    getSurfaceHeightApprox
+});
 
-function spawnDrop(itemId, x, y, z) {
-    const drop = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), getMaterials(itemId));
-    drop.position.set(x, y + 0.6, z);
-    drop.userData.itemId = itemId;
-    drop.userData.vy = 0;
-    scene.add(drop);
-    droppedItems.push(drop);
-}
-
-function updateDrops(dt) {
-    for (let i = droppedItems.length - 1; i >= 0; i--) {
-        const drop = droppedItems[i];
-        drop.userData.vy -= 18 * dt;
-        drop.position.y += drop.userData.vy * dt;
-
-        const nearby = getNearbyBlocks(drop.position.x, drop.position.z, 2);
-        const groundTop = getGroundAt(drop.position.x, drop.position.z, nearby, 0.2, drop.position.y + 0.5);
-        if (groundTop !== -999 && drop.position.y <= groundTop + 0.18) {
-            drop.position.y = groundTop + 0.18;
-            drop.userData.vy = 0;
-        }
-        if (drop.position.y < -20) {
-            drop.position.y = -20;
-            drop.userData.vy = 0;
-        }
-
-        const dx = drop.position.x - camera.position.x;
-        const dy = (drop.position.y + 0.5) - (camera.position.y - currentHeight + 0.6);
-        const dz = drop.position.z - camera.position.z;
-        if ((dx * dx + dy * dy + dz * dz) < 2.25) {
-            inventory.add(drop.userData.itemId, 1, true);
-            renderHotbar();
-            if (inventoryOpen) { renderInventory(); renderCrafting(); }
-            scene.remove(drop);
-            droppedItems.splice(i, 1);
-        }
-    }
-}
-
+const dropSystem = createDropSystem({
+    scene,
+    camera,
+    inventory,
+    getNearbyBlocks,
+    getMaterials,
+    onInventoryUpdated: () => {
+        renderHotbar();
+        if (inventoryOpen) { renderInventory(); renderCrafting(); }
+    },
+    getPlayerFeetY: () => camera.position.y - currentHeight
+});
 
 function posKey(x, y, z) { return `${x},${y},${z}`; }
 function colKey(x, z) { return `${x},${z}`; }
@@ -427,7 +455,7 @@ const hotbar = document.createElement('div');
 hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; flex-wrap:nowrap; width:max-content; gap:6px; background:rgba(0,0,0,0.7); padding:10px; border:4px solid #333; display:none; border-radius:8px;`;
 document.body.appendChild(hotbar);
 
-const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand', 'sandstone'];
+const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand', 'sandstone', 'crafting_table', 'coal_ore', 'iron_ore'];
 const slots = [];
 
 function renderHotbar() {
@@ -513,7 +541,7 @@ document.addEventListener('keydown', (e) => {
         if (val >= 0 && val < 9) { selectedIdx = val; updateSelection(val); }
     }
     if (e.code === 'KeyE') {
-        toggleInventory();
+        toggleInventory('inventory');
         return;
     }
     if (e.code === 'Space' && canJump) { velocity.y += 9.5; canJump = false; }
@@ -541,10 +569,14 @@ window.addEventListener('mousedown', (e) => {
         if (e.button === 0) { // 挖掘
             removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
             const blockType = intersect.object.userData.blockType || 'stone';
-            spawnDrop(blockType, pos.x, pos.y, pos.z);
+            dropSystem.spawnDrop(blockType, pos.x, pos.y, pos.z);
             removeBlockMesh(intersect.object);
             updateNeighbors(pos.x, pos.y, pos.z);
-        } else if (e.button === 2) { // 建造
+        } else if (e.button === 2) { // 建造/使用
+            if (intersect.object.userData.blockType === 'crafting_table') {
+                toggleInventory('table');
+                return;
+            }
             const selectedSlot = inventory.getSlots(27, 36)[selectedIdx];
             if (!selectedSlot || !blockTypes.includes(selectedSlot.itemId)) return;
             const b = new THREE.Mesh(boxGeo, getMaterials(selectedSlot.itemId));
@@ -579,7 +611,9 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
         prevT = t;
-        updateDrops(dt);
+        dropSystem.updateDrops(dt);
+        animalSystem.spawnAnimalsNearPlayer();
+        animalSystem.updateAnimals(dt);
 
         const targetH = isCrouching ? 1.2 : 1.7;
         currentHeight += (targetH - currentHeight) * 0.2;
