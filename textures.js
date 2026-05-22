@@ -3,6 +3,24 @@ import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
 const textureCache = new Map();
 const materialCache = new Map();
 
+function makeOreTexture(baseA, baseB, oreA, oreB) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 16; canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+    for (let x = 0; x < 16; x++) for (let y = 0; y < 16; y++) {
+        ctx.fillStyle = Math.random() > 0.5 ? baseA : baseB;
+        ctx.fillRect(x, y, 1, 1);
+    }
+    for (let i = 0; i < 24; i++) {
+        const x = Math.floor(Math.random() * 16);
+        const y = Math.floor(Math.random() * 16);
+        ctx.fillStyle = Math.random() > 0.5 ? oreA : oreB;
+        ctx.fillRect(x, y, 1, 1);
+        if (Math.random() > 0.65 && x < 15) ctx.fillRect(x + 1, y, 1, 1);
+    }
+    return new THREE.CanvasTexture(canvas);
+}
+
 // 核心繪圖邏輯：回傳一個畫好像素的 Canvas
 export function getPixelCanvas(c1, c2) {
     const canvas = document.createElement('canvas');
@@ -66,21 +84,30 @@ export function getMaterials(type) {
         materials = [mat, mat, mat, mat, mat, mat];
     }
     else if (type === 'furnace') {
-        const side = new THREE.MeshLambertMaterial({ map: createPixelTexture('#6f6f6f', '#4e4e4e') });
-        const top = new THREE.MeshLambertMaterial({ map: createPixelTexture('#8a8a8a', '#666666') });
-        materials = [side, side, top, side, side, side];
+        const side = new THREE.MeshLambertMaterial({ map: createPixelTexture('#7a7a7a', '#575757') });
+        const top = new THREE.MeshLambertMaterial({ map: createPixelTexture('#9b9b9b', '#747474') });
+        const front = new THREE.MeshLambertMaterial({ map: createPixelTexture('#505050', '#2f2f2f') });
+        materials = [side, side, top, side, front, side];
     }
     else if (type === 'coal_ore') {
-        const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#4b4b4b', '#222222') });
+        const oreTex = makeOreTexture('#8d8d8d', '#777777', '#252525', '#161616');
+        oreTex.magFilter = THREE.NearestFilter;
+        oreTex.minFilter = THREE.NearestFilter;
+        oreTex.generateMipmaps = false;
+        const mat = new THREE.MeshLambertMaterial({ map: oreTex });
         materials = [mat, mat, mat, mat, mat, mat];
     }
     else if (type === 'iron_ore') {
-        const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#b88f6f', '#8e6d54') });
+        const oreTex = makeOreTexture('#8d8d8d', '#777777', '#c18f66', '#9d6e49');
+        oreTex.magFilter = THREE.NearestFilter;
+        oreTex.minFilter = THREE.NearestFilter;
+        oreTex.generateMipmaps = false;
+        const mat = new THREE.MeshLambertMaterial({ map: oreTex });
         materials = [mat, mat, mat, mat, mat, mat];
     }
     else if (type === 'crafting_table') {
-        const side = new THREE.MeshLambertMaterial({ map: createPixelTexture('#8c6239', '#6f4a2d') });
-        const top = new THREE.MeshLambertMaterial({ map: createPixelTexture('#c8a36a', '#b3874f') });
+        const side = new THREE.MeshLambertMaterial({ map: createPixelTexture('#8d5f34', '#6e4626') });
+        const top = new THREE.MeshLambertMaterial({ map: createPixelTexture('#b7864e', '#a17343') });
         materials = [side, side, top, side, side, side];
     }
     else if (type === 'stone_axe') {
@@ -102,6 +129,11 @@ export function getItemIconCanvas(type) {
     const canvas = document.createElement('canvas');
     canvas.width = 16; canvas.height = 16;
     const ctx = canvas.getContext('2d');
+
+    if (type === 'furnace') {
+        const colors = ['#707070', '#4f4f4f'];
+        return getPixelCanvas(colors[0], colors[1]);
+    }
 
     if (type === 'iron') {
         ctx.fillStyle = '#c8c8c8';
