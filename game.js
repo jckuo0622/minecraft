@@ -877,16 +877,16 @@ function animate() {
         }
 
         const nextX = camera.position.x + velocity.x * dt;
-        if (!checkCapsuleWall(nextX, feetY, camera.position.z, nearbyGroundBlocks, playerRadius, currentHeight)) {
+        if (!checkCapsuleWall(nextX, feetY + 0.05, camera.position.z, nearbyGroundBlocks, playerRadius, currentHeight - 0.1)) {
             if (getGroundAt(nextX, camera.position.z, nearbyGroundBlocks, playerRadius, feetY) !== -999) camera.position.x = nextX;
         }
         const nextZ = camera.position.z + velocity.z * dt;
-        if (!checkCapsuleWall(camera.position.x, feetY, nextZ, nearbyGroundBlocks, playerRadius, currentHeight)) {
+        if (!checkCapsuleWall(camera.position.x, feetY + 0.05, nextZ, nearbyGroundBlocks, playerRadius, currentHeight - 0.1)) {
             if (getGroundAt(camera.position.x, nextZ, nearbyGroundBlocks, playerRadius, feetY) !== -999) camera.position.z = nextZ;
         }
         camera.position.y += velocity.y * dt;
         const newFeetY = camera.position.y - currentHeight;
-        const hitCeiling = checkCapsuleWall(camera.position.x, newFeetY, camera.position.z, nearbyGroundBlocks, playerRadius, currentHeight);
+        const hitCeiling = checkCapsuleWall(camera.position.x, newFeetY + 0.05, camera.position.z, nearbyGroundBlocks, playerRadius, currentHeight - 0.1);
         if (velocity.y > 0 && hitCeiling) {
             velocity.y = 0;
             camera.position.y = Math.floor(camera.position.y) - 0.01;
