@@ -28,3 +28,18 @@ export function checkWall(x, y, z, blocks, playerRadius) {
     }
     return false;
 }
+
+export function checkCapsuleWall(x, feetY, z, blocks, playerRadius, height = 2.0) {
+    const headY = feetY + height;
+    for (let b of blocks) {
+        const bPos = b.position;
+        if (Math.abs(bPos.x - x) > 1.5 || Math.abs(bPos.z - z) > 1.5) continue;
+        if (x + playerRadius > bPos.x - 0.5 && x - playerRadius < bPos.x + 0.5 &&
+            z + playerRadius > bPos.z - 0.5 && z - playerRadius < bPos.z + 0.5) {
+            const blockBottom = bPos.y - 0.5;
+            const blockTop = bPos.y + 0.5;
+            if (headY > blockBottom && feetY < blockTop) return true;
+        }
+    }
+    return false;
+}
