@@ -3,6 +3,59 @@ import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
 const textureCache = new Map();
 const materialCache = new Map();
 
+function makeCraftingTableTopTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 16; canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+    for (let x = 0; x < 16; x++) for (let y = 0; y < 16; y++) {
+        ctx.fillStyle = (x === 0 || y === 0 || x === 15 || y === 15) ? '#5d3b22' : '#b78951';
+        if ((x + y) % 3 === 0) ctx.fillStyle = '#a07243';
+        ctx.fillRect(x, y, 1, 1);
+    }
+    for (let i = 3; i < 13; i += 3) {
+        ctx.fillStyle = '#7a4d2d';
+        ctx.fillRect(i, 2, 1, 12);
+        ctx.fillRect(2, i, 12, 1);
+    }
+    return new THREE.CanvasTexture(canvas);
+}
+
+function makeFurnaceFrontTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 16; canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+    for (let x = 0; x < 16; x++) for (let y = 0; y < 16; y++) {
+        ctx.fillStyle = (x + y) % 2 === 0 ? '#6e6e6e' : '#5b5b5b';
+        ctx.fillRect(x, y, 1, 1);
+    }
+    ctx.fillStyle = '#2e2e2e';
+    ctx.fillRect(3, 3, 10, 3);
+    ctx.fillStyle = '#202020';
+    ctx.fillRect(4, 9, 8, 5);
+    ctx.fillStyle = '#8a8a8a';
+    ctx.fillRect(4, 4, 8, 1);
+    return new THREE.CanvasTexture(canvas);
+}
+
+function makeOreTexture(baseA, baseB, oreA, oreB) {
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 16; canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+    for (let x = 0; x < 16; x++) for (let y = 0; y < 16; y++) {
+        ctx.fillStyle = Math.random() > 0.5 ? baseA : baseB;
+        ctx.fillRect(x, y, 1, 1);
+    }
+    for (let i = 0; i < 24; i++) {
+        const x = Math.floor(Math.random() * 16);
+        const y = Math.floor(Math.random() * 16);
+        ctx.fillStyle = Math.random() > 0.5 ? oreA : oreB;
+        ctx.fillRect(x, y, 1, 1);
+        if (Math.random() > 0.65 && x < 15) ctx.fillRect(x + 1, y, 1, 1);
+    }
+    return new THREE.CanvasTexture(canvas);
+}
+
 // 核心繪圖邏輯：回傳一個畫好像素的 Canvas
 export function getPixelCanvas(c1, c2) {
     const canvas = document.createElement('canvas');
@@ -65,6 +118,39 @@ export function getMaterials(type) {
         const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#93a54f', '#839544') });
         materials = [mat, mat, mat, mat, mat, mat];
     }
+    else if (type === 'furnace') {
+        const side = new THREE.MeshLambertMaterial({ map: createPixelTexture('#7b7b7b', '#636363') });
+        const topTex = createPixelTexture('#9a9a9a', '#7a7a7a');
+        const frontTex = makeFurnaceFrontTexture();
+        topTex.magFilter = THREE.NearestFilter; topTex.minFilter = THREE.NearestFilter; topTex.generateMipmaps = false;
+        frontTex.magFilter = THREE.NearestFilter; frontTex.minFilter = THREE.NearestFilter; frontTex.generateMipmaps = false;
+        const top = new THREE.MeshLambertMaterial({ map: topTex });
+        const front = new THREE.MeshLambertMaterial({ map: frontTex });
+        materials = [side, side, top, side, front, side];
+    }
+    else if (type === 'coal_ore') {
+        const oreTex = makeOreTexture('#8d8d8d', '#777777', '#252525', '#161616');
+        oreTex.magFilter = THREE.NearestFilter;
+        oreTex.minFilter = THREE.NearestFilter;
+        oreTex.generateMipmaps = false;
+        const mat = new THREE.MeshLambertMaterial({ map: oreTex });
+        materials = [mat, mat, mat, mat, mat, mat];
+    }
+    else if (type === 'iron_ore') {
+        const oreTex = makeOreTexture('#8d8d8d', '#777777', '#c18f66', '#9d6e49');
+        oreTex.magFilter = THREE.NearestFilter;
+        oreTex.minFilter = THREE.NearestFilter;
+        oreTex.generateMipmaps = false;
+        const mat = new THREE.MeshLambertMaterial({ map: oreTex });
+        materials = [mat, mat, mat, mat, mat, mat];
+    }
+    else if (type === 'crafting_table') {
+        const side = new THREE.MeshLambertMaterial({ map: createPixelTexture('#8a5b31', '#6a4325') });
+        const topTex = makeCraftingTableTopTexture();
+        topTex.magFilter = THREE.NearestFilter; topTex.minFilter = THREE.NearestFilter; topTex.generateMipmaps = false;
+        const top = new THREE.MeshLambertMaterial({ map: topTex });
+        materials = [side, side, top, side, side, side];
+    }
     else if (type === 'stone_axe') {
         const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#9fa5ad', '#838b95') });
         materials = [mat, mat, mat, mat, mat, mat];
@@ -84,6 +170,31 @@ export function getItemIconCanvas(type) {
     const canvas = document.createElement('canvas');
     canvas.width = 16; canvas.height = 16;
     const ctx = canvas.getContext('2d');
+
+    if (type === 'furnace') {
+        ctx.fillStyle = '#666666'; ctx.fillRect(0, 0, 16, 16);
+        ctx.fillStyle = '#2f2f2f'; ctx.fillRect(3, 3, 10, 3);
+        ctx.fillStyle = '#1f1f1f'; ctx.fillRect(4, 9, 8, 5);
+        return canvas;
+    }
+
+    if (type === 'crafting_table') {
+        ctx.fillStyle = '#b78951'; ctx.fillRect(0, 0, 16, 16);
+        ctx.fillStyle = '#7a4d2d';
+        for (let i = 3; i < 13; i += 3) {
+            ctx.fillRect(i, 2, 1, 12);
+            ctx.fillRect(2, i, 12, 1);
+        }
+        return canvas;
+    }
+
+    if (type === 'iron') {
+        ctx.fillStyle = '#c8c8c8';
+        ctx.fillRect(3, 5, 10, 6);
+        ctx.fillStyle = '#9f9f9f';
+        ctx.fillRect(4, 6, 8, 4);
+        return canvas;
+    }
 
     if (type === 'stone_axe') {
         // 石斧頭
@@ -113,5 +224,10 @@ export const blockIconColors = {
     plank: ['#b88650', '#a57442'],
     sandstone: ['#b9b3a3', '#9e9888'],
     rope: ['#93a54f', '#839544'],
-    stone_axe: ['#9fa5ad', '#838b95']
+    stone_axe: ['#9fa5ad', '#838b95'],
+    crafting_table: ['#8c6239', '#6f4a2d'],
+    furnace: ['#6f6f6f', '#4e4e4e'],
+    coal_ore: ['#4b4b4b', '#222222'],
+    iron_ore: ['#b88f6f', '#8e6d54'],
+    iron: ['#c8c8c8', '#9f9f9f']
 };
