@@ -246,6 +246,22 @@ export function getItemIconCanvas(type) {
         return canvas;
     }
 
+
+    if (type === 'wood_helmet' || type === 'wood_chest' || type === 'wood_legs' || type === 'wood_boots' ||
+        type === 'iron_helmet' || type === 'iron_chest' || type === 'iron_legs' || type === 'iron_boots') {
+        const isIron = type.startsWith('iron_');
+        const c1 = isIron ? '#c8c8c8' : '#9a6b3f';
+        const c2 = isIron ? '#9f9f9f' : '#754a2b';
+        const part = type.split('_')[1];
+        ctx.fillStyle = c1;
+        if (part === 'helmet') { ctx.fillRect(3, 3, 10, 4); ctx.fillRect(3, 7, 2, 2); ctx.fillRect(11, 7, 2, 2); }
+        if (part === 'chest') { ctx.fillRect(3, 3, 10, 3); ctx.fillRect(2, 6, 12, 7); }
+        if (part === 'legs') { ctx.fillRect(3, 3, 10, 3); ctx.fillRect(3, 6, 3, 8); ctx.fillRect(10, 6, 3, 8); }
+        if (part === 'boots') { ctx.fillRect(3, 9, 3, 5); ctx.fillRect(10, 9, 3, 5); }
+        ctx.fillStyle = c2; ctx.fillRect(4, 4, 8, 1);
+        return canvas;
+    }
+
     if (type === 'stone_axe') {
         // 石斧頭
         ctx.fillStyle = '#9fa5ad';
@@ -279,5 +295,13 @@ export const blockIconColors = {
     furnace: ['#6f6f6f', '#4e4e4e'],
     coal_ore: ['#4b4b4b', '#222222'],
     iron_ore: ['#b88f6f', '#8e6d54'],
-    iron: ['#c8c8c8', '#9f9f9f']
+    iron: ['#c8c8c8', '#9f9f9f'],
+    wood_helmet: ['#9a6b3f', '#754a2b'],
+    wood_chest: ['#9a6b3f', '#754a2b'],
+    wood_legs: ['#9a6b3f', '#754a2b'],
+    wood_boots: ['#9a6b3f', '#754a2b'],
+    iron_helmet: ['#c8c8c8', '#9f9f9f'],
+    iron_chest: ['#c8c8c8', '#9f9f9f'],
+    iron_legs: ['#c8c8c8', '#9f9f9f'],
+    iron_boots: ['#c8c8c8', '#9f9f9f']
 };

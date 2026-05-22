@@ -20,7 +20,15 @@ const itemDefs = {
     furnace: new BlockItem('furnace', '熔爐'),
     coal_ore: new BlockItem('coal_ore', '煤礦'),
     iron_ore: new BlockItem('iron_ore', '鐵礦'),
-    iron: new BlockItem('iron', '鐵錠')
+    iron: new BlockItem('iron', '鐵錠'),
+    wood_helmet: new BlockItem('wood_helmet', '木頭帽子'),
+    wood_chest: new BlockItem('wood_chest', '木頭護甲'),
+    wood_legs: new BlockItem('wood_legs', '木頭護腿'),
+    wood_boots: new BlockItem('wood_boots', '木頭鞋子'),
+    iron_helmet: new BlockItem('iron_helmet', '鐵帽子'),
+    iron_chest: new BlockItem('iron_chest', '鐵護甲'),
+    iron_legs: new BlockItem('iron_legs', '鐵護腿'),
+    iron_boots: new BlockItem('iron_boots', '鐵鞋子')
 };
 
 const itemIconDataUrl = {};
@@ -185,10 +193,43 @@ function renderInventory() {
     });
 }
 
+
+function matchArmorRecipe() {
+    if (craftSlots.length !== 9) return null;
+    const mats = ['plank', 'iron'];
+    const at = (r, c) => craftSlots[r * 3 + c];
+    for (const mat of mats) {
+        const hasOnly = () => craftSlots.every(sl => !sl || sl.itemId === mat);
+        if (!hasOnly()) continue;
+
+        // helmet: top row 3 + mid left/right
+        if (at(0,0)&&at(0,1)&&at(0,2)&&at(1,0)&&at(1,2) && !at(1,1) && !at(2,0)&&!at(2,1)&&!at(2,2)) {
+            return { output: { itemId: `${mat === 'plank' ? 'wood' : 'iron'}_helmet`, amount: 1 } };
+        }
+        // chest: except top middle empty
+        const chestNeed=[[0,0],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]];
+        const chestOk=chestNeed.every(([r,c])=>at(r,c)) && !at(0,1);
+        if (chestOk) return { output: { itemId: `${mat === 'plank' ? 'wood' : 'iron'}_chest`, amount: 1 } };
+
+        // legs: top row3 + mid left/right + bot left/right
+        if (at(0,0)&&at(0,1)&&at(0,2)&&at(1,0)&&at(1,2)&&at(2,0)&&at(2,2) && !at(1,1)&&!at(2,1)) {
+            return { output: { itemId: `${mat === 'plank' ? 'wood' : 'iron'}_legs`, amount: 1 } };
+        }
+
+        // boots: two columns left/right bottom two rows
+        if (at(1,0)&&at(2,0)&&at(1,2)&&at(2,2) && !at(0,0)&&!at(0,1)&&!at(0,2)&&!at(1,1)&&!at(2,1)) {
+            return { output: { itemId: `${mat === 'plank' ? 'wood' : 'iron'}_boots`, amount: 1 } };
+        }
+    }
+    return null;
+}
+
 function getCraftResult() {
     const size = Math.sqrt(craftSlots.length);
 
     if (size === 3) {
+        const armorRecipe = matchArmorRecipe();
+        if (armorRecipe) return armorRecipe;
         const isPlankAt = (r, c) => {
             const slot = craftSlots[r * 3 + c];
             return slot && slot.itemId === 'plank' && slot.count >= 1;
