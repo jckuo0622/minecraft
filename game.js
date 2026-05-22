@@ -52,6 +52,7 @@ const furnaceAreaEl = document.getElementById('furnace-area');
 const furnaceInputEl = document.getElementById('furnace-input');
 const furnaceFuelEl = document.getElementById('furnace-fuel');
 const furnaceOutputEl = document.getElementById('furnace-output');
+const furnaceProgressFillEl = document.getElementById('furnace-progress-fill');
 let inventoryOpen = false;
 let craftingMode = 'inventory'; // inventory | table | furnace
 let openedInventoryFromLock = false;
@@ -148,6 +149,8 @@ function renderFurnace() {
     renderFurnaceSlot(furnaceInputEl, f.input);
     renderFurnaceSlot(furnaceFuelEl, f.fuel);
     renderFurnaceSlot(furnaceOutputEl, f.output);
+    const pct = Math.max(0, Math.min(100, (f.progress / 3.5) * 100));
+    furnaceProgressFillEl.style.width = `${pct}%`;
 }
 
 function setCraftMessage(msg) {

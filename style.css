@@ -92,4 +92,5 @@ body { margin: 0; overflow: hidden; background-color: #000; }
 .mc-furnace-area{display:none;}
 .furnace-slots{display:grid;grid-template-columns:42px 30px 42px;gap:8px;align-items:center;}
 .furnace-left{display:grid;grid-template-rows:42px 42px;gap:8px;}
-.mc-furnace-arrow{font-weight:700;text-align:center;}
+.mc-furnace-progress{width:30px;height:10px;border:1px solid #333;background:#4a4a4a;position:relative;}
+#furnace-progress-fill{position:absolute;left:0;top:0;height:100%;width:0%;background:#e2b86b;}
