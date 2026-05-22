@@ -84,8 +84,13 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
             if (spawnedAnimalCells.has(cell)) continue;
             const y = getSurfaceHeightApprox(rx, rz) + 0.01;
             if (y < -8) continue;
+            const near = getNearbyBlocks(rx + 0.5, rz + 0.5, 2);
+            const ground = getGroundAt(rx + 0.5, rz + 0.5, near, 0.25, y + 0.2);
+            if (ground === -999) continue;
+            const blocked = checkWall(rx + 0.5, ground + 0.9, rz + 0.5, near, 0.24);
+            if (blocked) continue;
             const type = chooseAnimalType(rx, rz);
-            const mob = createAnimal(type, rx + 0.5, y, rz + 0.5);
+            const mob = createAnimal(type, rx + 0.5, ground, rz + 0.5);
             scene.add(mob);
             animals.push(mob);
             spawnedAnimalCells.add(cell);

@@ -1,7 +1,7 @@
 import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
 import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/PointerLockControls.js';
 import { getMaterials, getPixelCanvas, blockIconColors, getItemIconCanvas } from './textures.js';
-import { getGroundAt, checkWall } from './physics.js';
+import { getGroundAt, checkWall, checkCapsuleWall } from './physics.js';
 import { BlockItem, Inventory, CraftingRecipe, CraftingManager } from './inventory.js';
 import { createAnimalSystem } from './animals.js';
 import { createDropSystem } from './drops.js';
@@ -709,7 +709,7 @@ controls.addEventListener('unlock', () => {
 let selectedIdx = 0;
 const velocity = new THREE.Vector3();
 const playerRadius = 0.35;
-let canJump = false, isCrouching = false, currentHeight = 1.7;
+let canJump = false, isCrouching = false, currentHeight = 1.8;
 const keys = {};
 
 document.addEventListener('keydown', (e) => {
@@ -722,7 +722,12 @@ document.addEventListener('keydown', (e) => {
         toggleInventory('inventory');
         return;
     }
-    if (e.code === 'Space' && canJump) { velocity.y += 9.5; canJump = false; }
+    if (e.code === 'Space' && canJump) {
+        const feetY = camera.position.y - currentHeight;
+        const near = getNearbyBlocks(camera.position.x, camera.position.z, 2);
+        const blockedHead = checkCapsuleWall(camera.position.x, feetY + 0.05, camera.position.z, near, playerRadius, currentHeight + 0.2);
+        if (!blockedHead) { velocity.y += 9.5; canJump = false; }
+    }
     if (e.shiftKey) isCrouching = true;
 });
 document.addEventListener('keyup', (e) => { 
@@ -843,7 +848,7 @@ function animate() {
         animalSystem.spawnAnimalsNearPlayer();
         animalSystem.updateAnimals(dt);
 
-        const targetH = isCrouching ? 1.2 : 1.7;
+        const targetH = isCrouching ? 1.2 : 1.8;
         currentHeight += (targetH - currentHeight) * 0.2;
         velocity.x -= velocity.x * 10 * dt;
         velocity.z -= velocity.z * 10 * dt;
@@ -872,14 +877,20 @@ function animate() {
         }
 
         const nextX = camera.position.x + velocity.x * dt;
-        if (!checkWall(nextX, camera.position.y, camera.position.z, nearbyGroundBlocks, playerRadius)) {
+        if (!checkCapsuleWall(nextX, feetY, camera.position.z, nearbyGroundBlocks, playerRadius, currentHeight)) {
             if (getGroundAt(nextX, camera.position.z, nearbyGroundBlocks, playerRadius, feetY) !== -999) camera.position.x = nextX;
         }
         const nextZ = camera.position.z + velocity.z * dt;
-        if (!checkWall(camera.position.x, camera.position.y, nextZ, nearbyGroundBlocks, playerRadius)) {
+        if (!checkCapsuleWall(camera.position.x, feetY, nextZ, nearbyGroundBlocks, playerRadius, currentHeight)) {
             if (getGroundAt(camera.position.x, nextZ, nearbyGroundBlocks, playerRadius, feetY) !== -999) camera.position.z = nextZ;
         }
         camera.position.y += velocity.y * dt;
+        const newFeetY = camera.position.y - currentHeight;
+        const hitCeiling = checkCapsuleWall(camera.position.x, newFeetY, camera.position.z, nearbyGroundBlocks, playerRadius, currentHeight);
+        if (velocity.y > 0 && hitCeiling) {
+            velocity.y = 0;
+            camera.position.y = Math.floor(camera.position.y) - 0.01;
+        }
         if (groundH !== -999 && camera.position.y - currentHeight <= groundH) {
             velocity.y = 0; camera.position.y = groundH + currentHeight; canJump = true;
         } else if (groundH !== -999) { canJump = false; }
