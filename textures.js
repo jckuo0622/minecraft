@@ -20,7 +20,29 @@ function makeCraftingTableTopTexture() {
     return new THREE.CanvasTexture(canvas);
 }
 
+function makeCraftingTableSideTexture(kind = 'front') {
+    const canvas = document.createElement('canvas');
+    canvas.width = 16; canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+    for (let x = 0; x < 16; x++) for (let y = 0; y < 16; y++) {
+        ctx.fillStyle = (x + y) % 2 === 0 ? '#83552f' : '#6a4325';
+        ctx.fillRect(x, y, 1, 1);
+    }
+    if (kind === 'front' || kind === 'back') {
+        ctx.fillStyle = '#b78951';
+        ctx.fillRect(3, 3, 10, 10);
+        ctx.fillStyle = '#754a2b';
+        ctx.fillRect(4, 4, 8, 8);
+    } else {
+        ctx.fillStyle = '#9a6b3f';
+        ctx.fillRect(2, 3, 12, 3);
+        ctx.fillRect(2, 10, 12, 3);
+    }
+    return new THREE.CanvasTexture(canvas);
+}
+
 function makeFurnaceFrontTexture() {
+
     const canvas = document.createElement('canvas');
     canvas.width = 16; canvas.height = 16;
     const ctx = canvas.getContext('2d');
@@ -37,7 +59,25 @@ function makeFurnaceFrontTexture() {
     return new THREE.CanvasTexture(canvas);
 }
 
+function makeFurnaceSideTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 16; canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+    for (let x = 0; x < 16; x++) for (let y = 0; y < 16; y++) {
+        ctx.fillStyle = (x + y) % 2 === 0 ? '#7a7a7a' : '#666666';
+        ctx.fillRect(x, y, 1, 1);
+    }
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(3, 4, 10, 8);
+    return new THREE.CanvasTexture(canvas);
+}
+
+function makeFurnaceTopTexture() {
+    return createPixelTexture('#9a9a9a', '#7a7a7a');
+}
+
 function makeOreTexture(baseA, baseB, oreA, oreB) {
+
 
     const canvas = document.createElement('canvas');
     canvas.width = 16; canvas.height = 16;
@@ -119,14 +159,16 @@ export function getMaterials(type) {
         materials = [mat, mat, mat, mat, mat, mat];
     }
     else if (type === 'furnace') {
-        const side = new THREE.MeshLambertMaterial({ map: createPixelTexture('#7b7b7b', '#636363') });
-        const topTex = createPixelTexture('#9a9a9a', '#7a7a7a');
+        const sideTex = makeFurnaceSideTexture();
+        const topTex = makeFurnaceTopTexture();
         const frontTex = makeFurnaceFrontTexture();
+        sideTex.magFilter = THREE.NearestFilter; sideTex.minFilter = THREE.NearestFilter; sideTex.generateMipmaps = false;
         topTex.magFilter = THREE.NearestFilter; topTex.minFilter = THREE.NearestFilter; topTex.generateMipmaps = false;
         frontTex.magFilter = THREE.NearestFilter; frontTex.minFilter = THREE.NearestFilter; frontTex.generateMipmaps = false;
+        const side = new THREE.MeshLambertMaterial({ map: sideTex });
         const top = new THREE.MeshLambertMaterial({ map: topTex });
         const front = new THREE.MeshLambertMaterial({ map: frontTex });
-        materials = [side, side, top, side, front, side];
+        materials = [side, side, top, top, front, side];
     }
     else if (type === 'coal_ore') {
         const oreTex = makeOreTexture('#8d8d8d', '#777777', '#252525', '#161616');
@@ -145,11 +187,19 @@ export function getMaterials(type) {
         materials = [mat, mat, mat, mat, mat, mat];
     }
     else if (type === 'crafting_table') {
-        const side = new THREE.MeshLambertMaterial({ map: createPixelTexture('#8a5b31', '#6a4325') });
         const topTex = makeCraftingTableTopTexture();
+        const frontTex = makeCraftingTableSideTexture('front');
+        const sideTex = makeCraftingTableSideTexture('side');
+        const backTex = makeCraftingTableSideTexture('back');
         topTex.magFilter = THREE.NearestFilter; topTex.minFilter = THREE.NearestFilter; topTex.generateMipmaps = false;
+        frontTex.magFilter = THREE.NearestFilter; frontTex.minFilter = THREE.NearestFilter; frontTex.generateMipmaps = false;
+        sideTex.magFilter = THREE.NearestFilter; sideTex.minFilter = THREE.NearestFilter; sideTex.generateMipmaps = false;
+        backTex.magFilter = THREE.NearestFilter; backTex.minFilter = THREE.NearestFilter; backTex.generateMipmaps = false;
         const top = new THREE.MeshLambertMaterial({ map: topTex });
-        materials = [side, side, top, side, side, side];
+        const front = new THREE.MeshLambertMaterial({ map: frontTex });
+        const side = new THREE.MeshLambertMaterial({ map: sideTex });
+        const back = new THREE.MeshLambertMaterial({ map: backTex });
+        materials = [side, side, top, top, front, back];
     }
     else if (type === 'stone_axe') {
         const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#9fa5ad', '#838b95') });

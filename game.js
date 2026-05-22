@@ -700,6 +700,32 @@ furnaceOutputEl.addEventListener('click', () => {
 });
 
 
+function tickFurnaces(dt) {
+    for (const f of furnaceStates.values()) {
+        if (f.burnTime > 0) f.burnTime -= dt;
+        const resultId = f.input ? smeltResult(f.input.itemId) : null;
+        if (f.input && resultId && (!f.output || f.output.itemId === resultId)) {
+            if (f.burnTime <= 0 && f.fuel && fuelTime(f.fuel.itemId) > 0) {
+                f.fuel.count -= 1;
+                f.burnTime += fuelTime(f.fuel.itemId);
+                if (f.fuel.count <= 0) f.fuel = null;
+            }
+            if (f.burnTime > 0) {
+                f.progress += dt;
+                if (f.progress >= 3.5) {
+                    f.progress = 0;
+                    f.input.count -= 1;
+                    if (f.input.count <= 0) f.input = null;
+                    if (!f.output) f.output = { itemId: resultId, count: 0 };
+                    f.output.count += 1;
+                }
+            }
+        } else {
+            f.progress = 0;
+        }
+    }
+}
+
 // --- E. 燈光與遊戲循環 ---
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const sun = new THREE.DirectionalLight(0xffffff, 0.6);
@@ -717,32 +743,10 @@ function animate() {
         const t = performance.now();
         const dt = Math.min((t - prevT) / 1000, 0.05);
         prevT = t;
+        tickFurnaces(dt);
         dropSystem.updateDrops(dt);
         animalSystem.spawnAnimalsNearPlayer();
         animalSystem.updateAnimals(dt);
-        for (const f of furnaceStates.values()) {
-            if (f.burnTime > 0) f.burnTime -= dt;
-            const resultId = f.input ? smeltResult(f.input.itemId) : null;
-            if (f.input && resultId && (!f.output || f.output.itemId === resultId)) {
-                if (f.burnTime <= 0 && f.fuel && fuelTime(f.fuel.itemId) > 0) {
-                    f.fuel.count -= 1;
-                    f.burnTime += fuelTime(f.fuel.itemId);
-                    if (f.fuel.count <= 0) f.fuel = null;
-                }
-                if (f.burnTime > 0) {
-                    f.progress += dt;
-                    if (f.progress >= 3.5) {
-                        f.progress = 0;
-                        f.input.count -= 1;
-                        if (f.input.count <= 0) f.input = null;
-                        if (!f.output) f.output = { itemId: resultId, count: 0 };
-                        f.output.count += 1;
-                    }
-                }
-            } else {
-                f.progress = 0;
-            }
-        }
         if (inventoryOpen && craftingMode === "furnace") renderFurnace();
 
         const targetH = isCrouching ? 1.2 : 1.7;
