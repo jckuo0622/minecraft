@@ -739,18 +739,19 @@ camera.position.set(0, 30, 0);
 let prevT = performance.now();
 function animate() {
     requestAnimationFrame(animate);
+    const t = performance.now();
+    const dt = Math.min((t - prevT) / 1000, 0.05);
+    prevT = t;
+    tickFurnaces(dt);
+    if (inventoryOpen && craftingMode === "furnace") renderFurnace();
+
     if (controls.isLocked) {
         updateWorld();
         processQueue();
         flushChunkBuildQueue();
-        const t = performance.now();
-        const dt = Math.min((t - prevT) / 1000, 0.05);
-        prevT = t;
-        tickFurnaces(dt);
         dropSystem.updateDrops(dt);
         animalSystem.spawnAnimalsNearPlayer();
         animalSystem.updateAnimals(dt);
-        if (inventoryOpen && craftingMode === "furnace") renderFurnace();
 
         const targetH = isCrouching ? 1.2 : 1.7;
         currentHeight += (targetH - currentHeight) * 0.2;
