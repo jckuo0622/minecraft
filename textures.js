@@ -3,7 +3,42 @@ import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
 const textureCache = new Map();
 const materialCache = new Map();
 
+function makeCraftingTableTopTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 16; canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+    for (let x = 0; x < 16; x++) for (let y = 0; y < 16; y++) {
+        ctx.fillStyle = (x === 0 || y === 0 || x === 15 || y === 15) ? '#5d3b22' : '#b78951';
+        if ((x + y) % 3 === 0) ctx.fillStyle = '#a07243';
+        ctx.fillRect(x, y, 1, 1);
+    }
+    for (let i = 3; i < 13; i += 3) {
+        ctx.fillStyle = '#7a4d2d';
+        ctx.fillRect(i, 2, 1, 12);
+        ctx.fillRect(2, i, 12, 1);
+    }
+    return new THREE.CanvasTexture(canvas);
+}
+
+function makeFurnaceFrontTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 16; canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+    for (let x = 0; x < 16; x++) for (let y = 0; y < 16; y++) {
+        ctx.fillStyle = (x + y) % 2 === 0 ? '#6e6e6e' : '#5b5b5b';
+        ctx.fillRect(x, y, 1, 1);
+    }
+    ctx.fillStyle = '#2e2e2e';
+    ctx.fillRect(3, 3, 10, 3);
+    ctx.fillStyle = '#202020';
+    ctx.fillRect(4, 9, 8, 5);
+    ctx.fillStyle = '#8a8a8a';
+    ctx.fillRect(4, 4, 8, 1);
+    return new THREE.CanvasTexture(canvas);
+}
+
 function makeOreTexture(baseA, baseB, oreA, oreB) {
+
     const canvas = document.createElement('canvas');
     canvas.width = 16; canvas.height = 16;
     const ctx = canvas.getContext('2d');
@@ -84,9 +119,13 @@ export function getMaterials(type) {
         materials = [mat, mat, mat, mat, mat, mat];
     }
     else if (type === 'furnace') {
-        const side = new THREE.MeshLambertMaterial({ map: createPixelTexture('#7a7a7a', '#575757') });
-        const top = new THREE.MeshLambertMaterial({ map: createPixelTexture('#9b9b9b', '#747474') });
-        const front = new THREE.MeshLambertMaterial({ map: createPixelTexture('#505050', '#2f2f2f') });
+        const side = new THREE.MeshLambertMaterial({ map: createPixelTexture('#7b7b7b', '#636363') });
+        const topTex = createPixelTexture('#9a9a9a', '#7a7a7a');
+        const frontTex = makeFurnaceFrontTexture();
+        topTex.magFilter = THREE.NearestFilter; topTex.minFilter = THREE.NearestFilter; topTex.generateMipmaps = false;
+        frontTex.magFilter = THREE.NearestFilter; frontTex.minFilter = THREE.NearestFilter; frontTex.generateMipmaps = false;
+        const top = new THREE.MeshLambertMaterial({ map: topTex });
+        const front = new THREE.MeshLambertMaterial({ map: frontTex });
         materials = [side, side, top, side, front, side];
     }
     else if (type === 'coal_ore') {
@@ -106,8 +145,10 @@ export function getMaterials(type) {
         materials = [mat, mat, mat, mat, mat, mat];
     }
     else if (type === 'crafting_table') {
-        const side = new THREE.MeshLambertMaterial({ map: createPixelTexture('#8d5f34', '#6e4626') });
-        const top = new THREE.MeshLambertMaterial({ map: createPixelTexture('#b7864e', '#a17343') });
+        const side = new THREE.MeshLambertMaterial({ map: createPixelTexture('#8a5b31', '#6a4325') });
+        const topTex = makeCraftingTableTopTexture();
+        topTex.magFilter = THREE.NearestFilter; topTex.minFilter = THREE.NearestFilter; topTex.generateMipmaps = false;
+        const top = new THREE.MeshLambertMaterial({ map: topTex });
         materials = [side, side, top, side, side, side];
     }
     else if (type === 'stone_axe') {
@@ -131,8 +172,20 @@ export function getItemIconCanvas(type) {
     const ctx = canvas.getContext('2d');
 
     if (type === 'furnace') {
-        const colors = ['#707070', '#4f4f4f'];
-        return getPixelCanvas(colors[0], colors[1]);
+        ctx.fillStyle = '#666666'; ctx.fillRect(0, 0, 16, 16);
+        ctx.fillStyle = '#2f2f2f'; ctx.fillRect(3, 3, 10, 3);
+        ctx.fillStyle = '#1f1f1f'; ctx.fillRect(4, 9, 8, 5);
+        return canvas;
+    }
+
+    if (type === 'crafting_table') {
+        ctx.fillStyle = '#b78951'; ctx.fillRect(0, 0, 16, 16);
+        ctx.fillStyle = '#7a4d2d';
+        for (let i = 3; i < 13; i += 3) {
+            ctx.fillRect(i, 2, 1, 12);
+            ctx.fillRect(2, i, 12, 1);
+        }
+        return canvas;
     }
 
     if (type === 'iron') {
