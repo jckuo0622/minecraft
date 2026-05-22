@@ -90,5 +90,6 @@ body { margin: 0; overflow: hidden; background-color: #000; }
 #inventory-panel.open .mc-recipe-book{display:block;}
 
 .mc-furnace-area{display:none;}
-.furnace-slots{display:grid;grid-template-columns:42px 42px 30px 42px;gap:8px;align-items:center;}
+.furnace-slots{display:grid;grid-template-columns:42px 30px 42px;gap:8px;align-items:center;}
+.furnace-left{display:grid;grid-template-rows:42px 42px;gap:8px;}
 .mc-furnace-arrow{font-weight:700;text-align:center;}

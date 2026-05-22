@@ -101,6 +101,47 @@ function renderFurnaceSlot(el, slot) {
     el.innerHTML = `<div class="mc-item-icon" style="background-image:url(${itemIconDataUrl[slot.itemId] || ''})"></div><span style="position:absolute;right:4px;bottom:2px;color:white;font-size:10px;">x${slot.count}</span>`;
 }
 
+
+function canPlaceInFurnace(slotType, itemId) {
+    if (slotType === 'fuel') return fuelTime(itemId) > 0;
+    if (slotType === 'input') return smeltResult(itemId) !== null;
+    return false;
+}
+
+function moveOneFromInventoryToFurnace(invIndex, slotType) {
+    if (!activeFurnaceKey) return;
+    const invSlot = inventory.slots[invIndex];
+    if (!invSlot || !canPlaceInFurnace(slotType, invSlot.itemId)) return;
+    const f = getFurnaceState(activeFurnaceKey);
+    const target = slotType === 'fuel' ? 'fuel' : 'input';
+    if (!f[target]) f[target] = { itemId: invSlot.itemId, count: 0 };
+    if (f[target].itemId !== invSlot.itemId) return;
+    inventory.remove(invSlot.itemId, 1);
+    f[target].count += 1;
+}
+
+function bindFurnaceSlot(el, slotType) {
+    el.ondragover = (e) => e.preventDefault();
+    el.ondrop = (e) => {
+        e.preventDefault();
+        if (!activeFurnaceKey || !inventoryOpen || craftingMode !== 'furnace') return;
+        const from = Number(e.dataTransfer.getData('text/plain'));
+        if (Number.isNaN(from)) return;
+        moveOneFromInventoryToFurnace(from, slotType);
+        renderInventory(); renderHotbar(); renderFurnace();
+    };
+    el.onclick = () => {
+        if (!activeFurnaceKey || !inventoryOpen || craftingMode !== 'furnace') return;
+        const f = getFurnaceState(activeFurnaceKey);
+        const target = slotType === 'fuel' ? 'fuel' : 'input';
+        if (!f[target]) return;
+        inventory.add(f[target].itemId, 1, true);
+        f[target].count -= 1;
+        if (f[target].count <= 0) f[target] = null;
+        renderInventory(); renderHotbar(); renderFurnace();
+    };
+}
+
 function renderFurnace() {
     if (!activeFurnaceKey) return;
     const f = getFurnaceState(activeFurnaceKey);
@@ -645,20 +686,8 @@ window.addEventListener('mousedown', (e) => {
 window.addEventListener('contextmenu', e => e.preventDefault());
 
 
-[furnaceInputEl, furnaceFuelEl].forEach((el, idx) => {
-    el.addEventListener('click', () => {
-        if (!activeFurnaceKey || !inventoryOpen || craftingMode !== 'furnace') return;
-        const selected = inventory.getSlots(27, 36)[selectedIdx];
-        if (!selected) return;
-        const f = getFurnaceState(activeFurnaceKey);
-        const target = idx === 0 ? 'input' : 'fuel';
-        if (!f[target]) f[target] = { itemId: selected.itemId, count: 0 };
-        if (f[target].itemId !== selected.itemId) return;
-        inventory.remove(selected.itemId, 1);
-        f[target].count += 1;
-        renderInventory(); renderHotbar(); renderFurnace();
-    });
-});
+bindFurnaceSlot(furnaceInputEl, 'input');
+bindFurnaceSlot(furnaceFuelEl, 'fuel');
 
 furnaceOutputEl.addEventListener('click', () => {
     if (!activeFurnaceKey || !inventoryOpen || craftingMode !== 'furnace') return;
