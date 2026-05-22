@@ -68,6 +68,7 @@ let unlockingForInventory = false;
 let craftSlots = Array.from({ length: 4 }, () => null);
 let activeFurnaceKey = null;
 const furnaceStates = new Map();
+const equipment = { helmet: null, chest: null, legs: null, boots: null };
 
 
 function setCraftMode(mode) {
@@ -161,6 +162,49 @@ function renderFurnace() {
     furnaceProgressFillEl.style.width = `${pct}%`;
 }
 
+
+function armorSlotForItem(itemId) {
+    if (!itemId) return null;
+    if (itemId.endsWith('_helmet')) return 'helmet';
+    if (itemId.endsWith('_chest')) return 'chest';
+    if (itemId.endsWith('_legs')) return 'legs';
+    if (itemId.endsWith('_boots')) return 'boots';
+    return null;
+}
+
+function renderEquipment() {
+    document.querySelectorAll('.equip-slot').forEach((el) => {
+        const slot = el.dataset.equip;
+        const equipped = equipment[slot];
+        if (!equipped) el.innerHTML = '';
+        else el.innerHTML = `<div class="mc-item-icon" style="background-image:url(${itemIconDataUrl[equipped.itemId] || ''})"></div><span style="position:absolute;right:4px;bottom:2px;color:white;font-size:10px;">x1</span>`;
+
+        el.ondragover = (e) => e.preventDefault();
+        el.ondrop = (e) => {
+            e.preventDefault();
+            const from = Number(e.dataTransfer.getData('text/plain'));
+            if (Number.isNaN(from)) return;
+            const invSlot = inventory.slots[from];
+            if (!invSlot || invSlot.count < 1) return;
+            const want = armorSlotForItem(invSlot.itemId);
+            if (want !== slot) return;
+            if (equipment[slot]) {
+                inventory.add(equipment[slot].itemId, 1, false);
+            }
+            inventory.remove(invSlot.itemId, 1);
+            equipment[slot] = { itemId: invSlot.itemId };
+            renderInventory(); renderHotbar(); renderEquipment();
+        };
+
+        el.onclick = () => {
+            if (!equipment[slot]) return;
+            inventory.add(equipment[slot].itemId, 1, false);
+            equipment[slot] = null;
+            renderInventory(); renderHotbar(); renderEquipment();
+        };
+    });
+}
+
 function setCraftMessage(msg) {
     craftingMessage.textContent = msg;
 }
@@ -188,6 +232,7 @@ function renderInventory() {
             inventory.moveSlot(from, to);
             renderInventory();
             renderHotbar();
+            renderEquipment();
             renderQuickCraft();
         });
     });
@@ -287,6 +332,7 @@ function renderCrafting() {
             inventory.remove(invSlot.itemId, 1);
             renderInventory();
             renderHotbar();
+            renderEquipment();
             renderQuickCraft();
             renderCrafting();
         renderFurnace();
@@ -371,6 +417,7 @@ function toggleInventory(mode = 'inventory') {
         renderCrafting();
         renderFurnace();
         renderHotbar();
+        renderEquipment();
         renderQuickCraft();
         setCraftMessage('');
     } else {
@@ -636,6 +683,7 @@ function updateSelection(idx) {
     });
 }
 renderHotbar();
+renderEquipment();
 updateSelection(0);
 
 // --- D. 控制與點擊 ---
@@ -719,6 +767,7 @@ window.addEventListener('mousedown', (e) => {
             inventory.remove(selectedSlot.itemId, 1);
             renderInventory();
             renderHotbar();
+            renderEquipment();
             renderQuickCraft();
             const placePos = pos.add(intersect.face.normal);
             b.position.copy(placePos);
