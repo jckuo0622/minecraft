@@ -307,9 +307,11 @@ export function getItemIconCanvas(type) {
 
     if (['stone_pickaxe', 'wood_pickaxe', 'iron_pickaxe'].includes(type)) {
         drawHandle();
-        const headDark = type.startsWith('iron_') ? '#2f2f2f' : '#4b4b4b';
-        const headMid = type.startsWith('iron_') ? '#8a8a8a' : '#8e8e8e';
-        const headLight = type.startsWith('iron_') ? '#ececec' : '#d6d6d6';
+        const isWood = type.startsWith('wood_');
+        const isIron = type.startsWith('iron_');
+        const headDark = isWood ? '#5b3f1f' : (isIron ? '#2f2f2f' : '#4b4b4b');
+        const headMid = isWood ? '#8a622f' : (isIron ? '#8a8a8a' : '#8e8e8e');
+        const headLight = isWood ? '#b8853e' : (isIron ? '#ececec' : '#d6d6d6');
         drawPixels([[6,3],[7,2],[8,2],[9,2],[10,2],[11,2],[12,3],[13,4]], headDark);
         drawPixels([[5,4],[6,4],[7,3],[8,3],[9,3],[10,3],[11,3],[12,4],[14,5]], headMid);
         drawPixels([[4,4],[5,3],[6,2],[7,1],[8,1],[9,1],[10,1],[11,1],[12,2],[13,3]], headLight);
