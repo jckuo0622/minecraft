@@ -262,6 +262,14 @@ export function getItemIconCanvas(type) {
         return canvas;
     }
 
+    if (type === 'stick') {
+        ctx.fillStyle = '#7a4e25';
+        ctx.fillRect(7, 2, 2, 12);
+        ctx.fillStyle = '#8b5a2b';
+        ctx.fillRect(8, 2, 1, 12);
+        return canvas;
+    }
+
     if (type === 'stone_axe') {
         // 石斧頭
         ctx.fillStyle = '#9fa5ad';
@@ -273,6 +281,31 @@ export function getItemIconCanvas(type) {
         ctx.fillRect(5, 7, 2, 8);
         ctx.fillStyle = '#8b5a2b';
         ctx.fillRect(6, 7, 1, 8);
+        return canvas;
+    }
+
+
+    if (type === 'stone_pickaxe') {
+        ctx.fillStyle = '#9fa5ad';
+        ctx.fillRect(2, 2, 12, 3);
+        ctx.fillStyle = '#838b95';
+        ctx.fillRect(3, 3, 10, 2);
+        ctx.fillStyle = '#7a4e25';
+        ctx.fillRect(7, 5, 2, 9);
+        ctx.fillStyle = '#8b5a2b';
+        ctx.fillRect(8, 5, 1, 9);
+        return canvas;
+    }
+
+    if (type === 'stone_sword') {
+        ctx.fillStyle = '#9fa5ad';
+        ctx.fillRect(7, 2, 2, 8);
+        ctx.fillStyle = '#838b95';
+        ctx.fillRect(6, 3, 4, 5);
+        ctx.fillStyle = '#7a4e25';
+        ctx.fillRect(7, 10, 2, 4);
+        ctx.fillStyle = '#8b5a2b';
+        ctx.fillRect(8, 10, 1, 4);
         return canvas;
     }
 
@@ -291,6 +324,9 @@ export const blockIconColors = {
     sandstone: ['#b9b3a3', '#9e9888'],
     rope: ['#93a54f', '#839544'],
     stone_axe: ['#9fa5ad', '#838b95'],
+    stick: ['#8b5a2b', '#7a4e25'],
+    stone_pickaxe: ['#9fa5ad', '#838b95'],
+    stone_sword: ['#9fa5ad', '#838b95'],
     crafting_table: ['#8c6239', '#6f4a2d'],
     furnace: ['#6f6f6f', '#4e4e4e'],
     coal_ore: ['#4b4b4b', '#222222'],
