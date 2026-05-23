@@ -312,6 +312,35 @@ export function getItemIconCanvas(type) {
         return canvas;
     }
 
+
+    if (['stone_pickaxe', 'wood_pickaxe', 'iron_pickaxe'].includes(type)) {
+        const isWood = type === 'wood_pickaxe';
+        const isIron = type === 'iron_pickaxe';
+        ctx.fillStyle = isWood ? '#b88650' : (isIron ? '#d2d2d2' : '#9fa5ad');
+        ctx.fillRect(2, 2, 12, 3);
+        ctx.fillStyle = isWood ? '#9b6d3f' : (isIron ? '#aeaeae' : '#838b95');
+        ctx.fillRect(3, 3, 10, 2);
+        ctx.fillStyle = '#7a4e25';
+        ctx.fillRect(7, 5, 2, 9);
+        ctx.fillStyle = '#8b5a2b';
+        ctx.fillRect(8, 5, 1, 9);
+        return canvas;
+    }
+
+    if (['stone_sword', 'wood_sword', 'iron_sword'].includes(type)) {
+        const isWood = type === 'wood_sword';
+        const isIron = type === 'iron_sword';
+        ctx.fillStyle = isWood ? '#b88650' : (isIron ? '#d2d2d2' : '#9fa5ad');
+        ctx.fillRect(7, 2, 2, 8);
+        ctx.fillStyle = isWood ? '#9b6d3f' : (isIron ? '#aeaeae' : '#838b95');
+        ctx.fillRect(6, 3, 4, 5);
+        ctx.fillStyle = '#7a4e25';
+        ctx.fillRect(7, 10, 2, 4);
+        ctx.fillStyle = '#8b5a2b';
+        ctx.fillRect(8, 10, 1, 4);
+        return canvas;
+    }
+
     const colors = blockIconColors[type] || ['#ffffff', '#dddddd'];
     return getPixelCanvas(colors[0], colors[1]);
 }
