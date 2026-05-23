@@ -269,6 +269,11 @@ function matchArmorRecipe() {
     return null;
 }
 
+function isRecipeLargerThan2x2(recipe) {
+    const totalInputs = recipe.inputs.reduce((sum, input) => sum + input.amount, 0);
+    return totalInputs > 4;
+}
+
 function getCraftResult() {
     const size = Math.sqrt(craftSlots.length);
 
@@ -303,6 +308,7 @@ function getCraftResult() {
     }
 
     for (const recipe of craftingManager.recipes) {
+        if (craftingMode !== 'table' && isRecipeLargerThan2x2(recipe)) continue;
         const needs = new Map(recipe.inputs.map(i => [i.itemId, i.amount]));
         if (counts.size !== needs.size) continue;
         let ok = true;
@@ -383,8 +389,13 @@ function renderQuickCraft() {
 
         const btn = document.createElement('button');
         btn.textContent = '合成';
-        btn.disabled = !craftingManager.canCraft(recipe);
+        const needsTable = isRecipeLargerThan2x2(recipe);
+        btn.disabled = !craftingManager.canCraft(recipe) || (needsTable && craftingMode !== 'table');
         btn.onclick = () => {
+            if (isRecipeLargerThan2x2(recipe) && craftingMode !== 'table') {
+                setCraftMessage('此配方需要在合成台（3x3）製作');
+                return;
+            }
             const result = craftingManager.craft(recipe);
             setCraftMessage(result.message);
             renderInventory(); renderHotbar(); renderCrafting(); renderQuickCraft(); renderQuickCraft();
