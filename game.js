@@ -288,7 +288,7 @@ function matchStickRecipe() {
             let ok = true;
             for (let i = 0; i < craftSlots.length; i++) {
                 const slot = craftSlots[i];
-                if (need.has(i)) { if (!slot || slot.itemId !== 'wood') ok = false; }
+                if (need.has(i)) { if (!slot || slot.itemId !== 'plank') ok = false; }
                 else if (slot) ok = false;
             }
             if (ok) return { output: { itemId: 'stick', amount: 4 } };
@@ -303,7 +303,7 @@ function matchStickRecipe() {
             let ok = true;
             for (let i = 0; i < craftSlots.length; i++) {
                 const slot = craftSlots[i];
-                if (need.has(i)) { if (!slot || slot.itemId !== 'wood') ok = false; }
+                if (need.has(i)) { if (!slot || slot.itemId !== 'plank') ok = false; }
                 else if (slot) ok = false;
             }
             if (ok) return { output: { itemId: 'stick', amount: 4 } };
