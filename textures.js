@@ -275,49 +275,45 @@ export function getItemIconCanvas(type) {
         pixels.forEach(([x, y]) => ctx.fillRect(x, y, 1, 1));
     };
 
-    const drawWoodenHandle = () => {
-        drawPixels([[4,11],[5,10],[6,9],[7,8],[8,7],[9,6],[10,5]], '#3f2a1f');
-        drawPixels([[5,11],[6,10],[7,9],[8,8],[9,7],[10,6],[11,5]], '#6a4934');
-        drawPixels([[6,11],[7,10],[8,9],[9,8],[10,7],[11,6]], '#9b6b4a');
+    const drawHandle = () => {
+        drawPixels([[3,13],[4,12],[5,11],[6,10],[7,9],[8,8],[9,7],[10,6],[11,5]], '#3d2b10');
+        drawPixels([[4,13],[5,12],[6,11],[7,10],[8,9],[9,8],[10,7],[11,6],[12,5]], '#6b4b1d');
+        drawPixels([[5,13],[6,12],[7,11],[8,10],[9,9],[10,8],[11,7]], '#8f6a2b');
     };
 
-    const matColors = (base) => {
-        if (base === 'wood') return { light: '#b8845a', mid: '#946646', dark: '#5e3e2d' };
-        if (base === 'iron') return { light: '#d7d7d7', mid: '#b5b5b5', dark: '#6f6f6f' };
-        return { light: '#a0a7b0', mid: '#7e8791', dark: '#4c535b' };
-    };
+    if (['stone_sword', 'wood_sword', 'iron_sword'].includes(type)) {
+        drawHandle();
+        const bladeDark = type.startsWith('iron_') ? '#4a4a4a' : '#4f3a18';
+        const bladeMid = type.startsWith('iron_') ? '#8e8e8e' : '#7b5a24';
+        const bladeLight = type.startsWith('iron_') ? '#d6d6d6' : '#a87b30';
+        drawPixels([[7,8],[8,7],[9,6],[10,5],[11,4],[12,3]], bladeDark);
+        drawPixels([[8,8],[9,7],[10,6],[11,5],[12,4],[13,3]], bladeMid);
+        drawPixels([[9,8],[10,7],[11,6],[12,5],[13,4]], bladeLight);
+        drawPixels([[5,10],[6,10],[7,10],[8,10]], '#2f220c');
+        drawPixels([[6,11],[7,11]], '#5e451a');
+        return canvas;
+    }
 
     if (['stone_axe', 'wood_axe', 'iron_axe'].includes(type)) {
-        const base = type.startsWith('wood_') ? 'wood' : (type.startsWith('iron_') ? 'iron' : 'stone');
-        const c = matColors(base);
-        drawWoodenHandle();
-        drawPixels([[8,4],[9,3],[10,2],[11,2],[12,2],[12,3],[11,4],[10,4],[9,5],[8,5]], c.light);
-        drawPixels([[7,4],[8,3],[9,2],[10,1],[11,1],[12,1],[13,2],[13,3],[12,4],[11,5],[10,5],[9,6],[8,6]], c.dark);
-        drawPixels([[9,4],[10,3],[11,3],[10,4]], c.mid);
+        drawHandle();
+        const headDark = type.startsWith('iron_') ? '#3a3a3a' : '#4f3a18';
+        const headMid = type.startsWith('iron_') ? '#8a8a8a' : '#7c5a24';
+        const headLight = type.startsWith('iron_') ? '#d8d8d8' : '#aa7c2f';
+        drawPixels([[9,4],[10,3],[11,2],[12,2],[13,3],[12,4],[11,5],[10,5]], headDark);
+        drawPixels([[8,4],[9,3],[10,2],[11,1],[12,1],[13,2],[13,4],[12,5],[11,6],[10,6]], headMid);
+        drawPixels([[9,2],[10,1],[11,0],[12,0],[13,1],[12,3],[11,4]], headLight);
         return canvas;
     }
 
     if (['stone_pickaxe', 'wood_pickaxe', 'iron_pickaxe'].includes(type)) {
-        const base = type.startsWith('wood_') ? 'wood' : (type.startsWith('iron_') ? 'iron' : 'stone');
-        const c = matColors(base);
-        drawWoodenHandle();
-        drawPixels([[6,3],[7,2],[8,2],[9,2],[10,2],[11,2],[12,3],[5,4],[6,4],[12,4],[13,4]], c.light);
-        drawPixels([[5,3],[6,2],[7,1],[8,1],[9,1],[10,1],[11,1],[12,2],[13,3],[14,4],[4,4],[5,5],[13,5]], c.dark);
-        drawPixels([[7,3],[8,3],[9,3],[10,3],[11,3]], c.mid);
-        return canvas;
-    }
-
-    if (['stone_sword', 'wood_sword', 'iron_sword'].includes(type)) {
-        const base = type.startsWith('wood_') ? 'wood' : (type.startsWith('iron_') ? 'iron' : 'stone');
-        const c = matColors(base);
-        drawPixels([[5,9],[6,8],[7,7],[8,6],[9,5],[10,4]], '#3f2a1f');
-        drawPixels([[6,9],[7,8],[8,7],[9,6],[10,5],[11,4]], '#6a4934');
-        drawPixels([[7,9],[8,8],[9,7],[10,6]], '#9b6b4a');
-        drawPixels([[4,10],[5,10],[6,10],[7,10],[8,10]], '#5e3e2d');
-        drawPixels([[5,11],[6,11],[7,11]], '#8c6845');
-        drawPixels([[8,3],[9,2],[10,1],[11,2],[10,3],[9,4],[8,5],[7,6]], c.light);
-        drawPixels([[7,3],[8,2],[9,1],[10,0],[11,1],[12,2],[11,3],[10,4],[9,5],[8,6],[7,7],[6,6]], c.dark);
-        drawPixels([[9,3],[10,2],[10,3],[9,4],[8,4]], c.mid);
+        drawHandle();
+        const headDark = type.startsWith('iron_') ? '#2f2f2f' : '#4b4b4b';
+        const headMid = type.startsWith('iron_') ? '#8a8a8a' : '#8e8e8e';
+        const headLight = type.startsWith('iron_') ? '#ececec' : '#d6d6d6';
+        drawPixels([[6,3],[7,2],[8,2],[9,2],[10,2],[11,2],[12,3],[13,4]], headDark);
+        drawPixels([[5,4],[6,4],[7,3],[8,3],[9,3],[10,3],[11,3],[12,4],[14,5]], headMid);
+        drawPixels([[4,4],[5,3],[6,2],[7,1],[8,1],[9,1],[10,1],[11,1],[12,2],[13,3]], headLight);
+        drawPixels([[12,5],[12,6],[13,7],[13,8]], headDark);
         return canvas;
     }
 
