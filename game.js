@@ -14,6 +14,15 @@ const itemDefs = {
     stone: new BlockItem('stone', '石頭'),
     plank: new BlockItem('plank', '木板'),
     stone_axe: new BlockItem('stone_axe', '石斧'),
+    wood_axe: new BlockItem('wood_axe', '木斧'),
+    iron_axe: new BlockItem('iron_axe', '鐵斧'),
+    stick: new BlockItem('stick', '木棍'),
+    stone_pickaxe: new BlockItem('stone_pickaxe', '石鎬'),
+    wood_pickaxe: new BlockItem('wood_pickaxe', '木鎬'),
+    iron_pickaxe: new BlockItem('iron_pickaxe', '鐵鎬'),
+    stone_sword: new BlockItem('stone_sword', '石劍'),
+    wood_sword: new BlockItem('wood_sword', '木劍'),
+    iron_sword: new BlockItem('iron_sword', '鐵劍'),
     rope: new BlockItem('rope', '草繩'),
     sandstone: new BlockItem('sandstone', '砂岩'),
     crafting_table: new BlockItem('crafting_table', '合成台'),
@@ -41,7 +50,6 @@ Object.keys(blockIconColors).forEach((id) => {
 const inventory = new Inventory();
 const craftingManager = new CraftingManager(inventory);
 craftingManager.addRecipe(new CraftingRecipe('plank_recipe', '木頭 x1 → 木板 x4', [{ itemId: 'wood', amount: 1 }], { itemId: 'plank', amount: 4 }));
-craftingManager.addRecipe(new CraftingRecipe('axe_recipe', '石頭 x2 + 木頭 x1 → 石斧 x1', [{ itemId: 'stone', amount: 2 }, { itemId: 'wood', amount: 1 }], { itemId: 'stone_axe', amount: 1 }));
 craftingManager.addRecipe(new CraftingRecipe('rope_recipe', '樹葉 x2 → 草繩 x1', [{ itemId: 'leaf', amount: 2 }], { itemId: 'rope', amount: 1 }));
 craftingManager.addRecipe(new CraftingRecipe('crafting_table_recipe', '木板 x4 → 合成台 x1', [{ itemId: 'plank', amount: 4 }], { itemId: 'crafting_table', amount: 1 }));
 craftingManager.addRecipe(new CraftingRecipe('furnace_recipe', '石頭 x8 → 熔爐 x1', [{ itemId: 'stone', amount: 8 }], { itemId: 'furnace', amount: 1 }));
@@ -269,12 +277,89 @@ function matchArmorRecipe() {
     return null;
 }
 
+function isRecipeLargerThan2x2(recipe) {
+    const totalInputs = recipe.inputs.reduce((sum, input) => sum + input.amount, 0);
+    return totalInputs > 4;
+}
+
+function matchStickRecipe() {
+    const size = Math.sqrt(craftSlots.length);
+    if (size !== 2 && size !== 3) return null;
+    const need = new Set();
+    if (size === 2) {
+        for (let c = 0; c < 2; c++) {
+            need.clear();
+            need.add(0 * 2 + c);
+            need.add(1 * 2 + c);
+            let ok = true;
+            for (let i = 0; i < craftSlots.length; i++) {
+                const slot = craftSlots[i];
+                if (need.has(i)) { if (!slot || slot.itemId !== 'plank') ok = false; }
+                else if (slot) ok = false;
+            }
+            if (ok) return { output: { itemId: 'stick', amount: 4 } };
+        }
+        return null;
+    }
+    for (let c = 0; c < 3; c++) {
+        for (let r = 0; r < 2; r++) {
+            need.clear();
+            need.add(r * 3 + c);
+            need.add((r + 1) * 3 + c);
+            let ok = true;
+            for (let i = 0; i < craftSlots.length; i++) {
+                const slot = craftSlots[i];
+                if (need.has(i)) { if (!slot || slot.itemId !== 'plank') ok = false; }
+                else if (slot) ok = false;
+            }
+            if (ok) return { output: { itemId: 'stick', amount: 4 } };
+        }
+    }
+    return null;
+}
+
+function matchStoneToolRecipes() {
+    if (craftSlots.length !== 9) return null;
+    const mats = [
+        { id: 'stone', key: 'stone', zh: '石' },
+        { id: 'plank', key: 'wood', zh: '木' },
+        { id: 'iron', key: 'iron', zh: '鐵' }
+    ];
+    const at = (r, c, id) => {
+        const slot = craftSlots[r * 3 + c];
+        return slot && slot.itemId === id;
+    };
+    const emptyElse = (allowed) => craftSlots.every((slot, i) => !slot || allowed.has(i));
+
+    for (const mat of mats) {
+        const m = mat.id;
+        if (at(0,0,m) && at(0,1,m) && at(1,0,m) && at(1,1,'stick') && at(2,1,'stick') && emptyElse(new Set([0,1,3,4,7]))) {
+            return { output: { itemId: `${mat.key}_axe`, amount: 1 } };
+        }
+
+        if (at(0,0,m) && at(0,1,m) && at(0,2,m) && at(1,1,'stick') && at(2,1,'stick') && emptyElse(new Set([0,1,2,4,7]))) {
+            return { output: { itemId: `${mat.key}_pickaxe`, amount: 1 } };
+        }
+
+        if (at(0,1,m) && at(1,1,m) && at(2,1,'stick') && emptyElse(new Set([1,4,7]))) {
+            return { output: { itemId: `${mat.key}_sword`, amount: 1 } };
+        }
+    }
+
+    return null;
+}
+
 function getCraftResult() {
+    const stickRecipe = matchStickRecipe();
+    if (stickRecipe) return stickRecipe;
+
     const size = Math.sqrt(craftSlots.length);
 
     if (size === 3) {
         const armorRecipe = matchArmorRecipe();
         if (armorRecipe) return armorRecipe;
+        const stoneToolRecipe = matchStoneToolRecipes();
+        if (stoneToolRecipe) return stoneToolRecipe;
         const isPlankAt = (r, c) => {
             const slot = craftSlots[r * 3 + c];
             return slot && slot.itemId === 'plank' && slot.count >= 1;
@@ -303,6 +388,7 @@ function getCraftResult() {
     }
 
     for (const recipe of craftingManager.recipes) {
+        if (craftingMode !== 'table' && isRecipeLargerThan2x2(recipe)) continue;
         const needs = new Map(recipe.inputs.map(i => [i.itemId, i.amount]));
         if (counts.size !== needs.size) continue;
         let ok = true;
@@ -383,8 +469,13 @@ function renderQuickCraft() {
 
         const btn = document.createElement('button');
         btn.textContent = '合成';
-        btn.disabled = !craftingManager.canCraft(recipe);
+        const needsTable = isRecipeLargerThan2x2(recipe);
+        btn.disabled = !craftingManager.canCraft(recipe) || (needsTable && craftingMode !== 'table');
         btn.onclick = () => {
+            if (isRecipeLargerThan2x2(recipe) && craftingMode !== 'table') {
+                setCraftMessage('此配方需要在合成台（3x3）製作');
+                return;
+            }
             const result = craftingManager.craft(recipe);
             setCraftMessage(result.message);
             renderInventory(); renderHotbar(); renderCrafting(); renderQuickCraft(); renderQuickCraft();

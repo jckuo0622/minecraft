@@ -262,17 +262,55 @@ export function getItemIconCanvas(type) {
         return canvas;
     }
 
-    if (type === 'stone_axe') {
-        // 石斧頭
-        ctx.fillStyle = '#9fa5ad';
+    if (type === 'stick') {
+        ctx.fillStyle = '#7a4e25';
+        ctx.fillRect(7, 2, 2, 12);
+        ctx.fillStyle = '#8b5a2b';
+        ctx.fillRect(8, 2, 1, 12);
+        return canvas;
+    }
+
+    if (['stone_axe', 'wood_axe', 'iron_axe'].includes(type)) {
+        const isWood = type === 'wood_axe';
+        const isIron = type === 'iron_axe';
+        ctx.fillStyle = isWood ? '#b88650' : (isIron ? '#d2d2d2' : '#9fa5ad');
         ctx.fillRect(8, 2, 6, 5);
-        ctx.fillStyle = '#838b95';
+        ctx.fillStyle = isWood ? '#9b6d3f' : (isIron ? '#aeaeae' : '#838b95');
         ctx.fillRect(7, 3, 4, 4);
         // 木柄
         ctx.fillStyle = '#7a4e25';
         ctx.fillRect(5, 7, 2, 8);
         ctx.fillStyle = '#8b5a2b';
         ctx.fillRect(6, 7, 1, 8);
+        return canvas;
+    }
+
+
+    if (['stone_pickaxe', 'wood_pickaxe', 'iron_pickaxe'].includes(type)) {
+        const isWood = type === 'wood_pickaxe';
+        const isIron = type === 'iron_pickaxe';
+        ctx.fillStyle = isWood ? '#b88650' : (isIron ? '#d2d2d2' : '#9fa5ad');
+        ctx.fillRect(2, 2, 12, 3);
+        ctx.fillStyle = isWood ? '#9b6d3f' : (isIron ? '#aeaeae' : '#838b95');
+        ctx.fillRect(3, 3, 10, 2);
+        ctx.fillStyle = '#7a4e25';
+        ctx.fillRect(7, 5, 2, 9);
+        ctx.fillStyle = '#8b5a2b';
+        ctx.fillRect(8, 5, 1, 9);
+        return canvas;
+    }
+
+    if (['stone_sword', 'wood_sword', 'iron_sword'].includes(type)) {
+        const isWood = type === 'wood_sword';
+        const isIron = type === 'iron_sword';
+        ctx.fillStyle = isWood ? '#b88650' : (isIron ? '#d2d2d2' : '#9fa5ad');
+        ctx.fillRect(7, 2, 2, 8);
+        ctx.fillStyle = isWood ? '#9b6d3f' : (isIron ? '#aeaeae' : '#838b95');
+        ctx.fillRect(6, 3, 4, 5);
+        ctx.fillStyle = '#7a4e25';
+        ctx.fillRect(7, 10, 2, 4);
+        ctx.fillStyle = '#8b5a2b';
+        ctx.fillRect(8, 10, 1, 4);
         return canvas;
     }
 
@@ -291,6 +329,15 @@ export const blockIconColors = {
     sandstone: ['#b9b3a3', '#9e9888'],
     rope: ['#93a54f', '#839544'],
     stone_axe: ['#9fa5ad', '#838b95'],
+    stick: ['#8b5a2b', '#7a4e25'],
+    stone_pickaxe: ['#9fa5ad', '#838b95'],
+    stone_sword: ['#9fa5ad', '#838b95'],
+    wood_axe: ['#b88650', '#9b6d3f'],
+    wood_pickaxe: ['#b88650', '#9b6d3f'],
+    wood_sword: ['#b88650', '#9b6d3f'],
+    iron_axe: ['#d2d2d2', '#aeaeae'],
+    iron_pickaxe: ['#d2d2d2', '#aeaeae'],
+    iron_sword: ['#d2d2d2', '#aeaeae'],
     crafting_table: ['#8c6239', '#6f4a2d'],
     furnace: ['#6f6f6f', '#4e4e4e'],
     coal_ore: ['#4b4b4b', '#222222'],
