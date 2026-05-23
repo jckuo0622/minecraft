@@ -262,17 +262,60 @@ export function getItemIconCanvas(type) {
         return canvas;
     }
 
-    if (type === 'stone_axe') {
-        // 石斧頭
-        ctx.fillStyle = '#9fa5ad';
-        ctx.fillRect(8, 2, 6, 5);
-        ctx.fillStyle = '#838b95';
-        ctx.fillRect(7, 3, 4, 4);
-        // 木柄
+    if (type === 'stick') {
         ctx.fillStyle = '#7a4e25';
-        ctx.fillRect(5, 7, 2, 8);
+        ctx.fillRect(7, 2, 2, 12);
         ctx.fillStyle = '#8b5a2b';
-        ctx.fillRect(6, 7, 1, 8);
+        ctx.fillRect(8, 2, 1, 12);
+        return canvas;
+    }
+
+    const drawPixels = (pixels, color) => {
+        ctx.fillStyle = color;
+        pixels.forEach(([x, y]) => ctx.fillRect(x, y, 1, 1));
+    };
+
+    const drawHandle = () => {
+        drawPixels([[3,13],[4,12],[5,11],[6,10],[7,9],[8,8],[9,7],[10,6],[11,5]], '#3d2b10');
+        drawPixels([[4,13],[5,12],[6,11],[7,10],[8,9],[9,8],[10,7],[11,6],[12,5]], '#6b4b1d');
+        drawPixels([[5,13],[6,12],[7,11],[8,10],[9,9],[10,8],[11,7]], '#8f6a2b');
+    };
+
+    if (['stone_sword', 'wood_sword', 'iron_sword'].includes(type)) {
+        drawHandle();
+        const bladeDark = type.startsWith('iron_') ? '#4a4a4a' : '#4f3a18';
+        const bladeMid = type.startsWith('iron_') ? '#8e8e8e' : '#7b5a24';
+        const bladeLight = type.startsWith('iron_') ? '#d6d6d6' : '#a87b30';
+        drawPixels([[7,8],[8,7],[9,6],[10,5],[11,4],[12,3]], bladeDark);
+        drawPixels([[8,8],[9,7],[10,6],[11,5],[12,4],[13,3]], bladeMid);
+        drawPixels([[9,8],[10,7],[11,6],[12,5],[13,4]], bladeLight);
+        drawPixels([[5,10],[6,10],[7,10],[8,10]], '#2f220c');
+        drawPixels([[6,11],[7,11]], '#5e451a');
+        return canvas;
+    }
+
+    if (['stone_axe', 'wood_axe', 'iron_axe'].includes(type)) {
+        drawHandle();
+        const headDark = type.startsWith('iron_') ? '#3a3a3a' : '#4f3a18';
+        const headMid = type.startsWith('iron_') ? '#8a8a8a' : '#7c5a24';
+        const headLight = type.startsWith('iron_') ? '#d8d8d8' : '#aa7c2f';
+        drawPixels([[9,4],[10,3],[11,2],[12,2],[13,3],[12,4],[11,5],[10,5]], headDark);
+        drawPixels([[8,4],[9,3],[10,2],[11,1],[12,1],[13,2],[13,4],[12,5],[11,6],[10,6]], headMid);
+        drawPixels([[9,2],[10,1],[11,0],[12,0],[13,1],[12,3],[11,4]], headLight);
+        return canvas;
+    }
+
+    if (['stone_pickaxe', 'wood_pickaxe', 'iron_pickaxe'].includes(type)) {
+        drawHandle();
+        const isWood = type.startsWith('wood_');
+        const isIron = type.startsWith('iron_');
+        const headDark = isWood ? '#5b3f1f' : (isIron ? '#2f2f2f' : '#4b4b4b');
+        const headMid = isWood ? '#8a622f' : (isIron ? '#8a8a8a' : '#8e8e8e');
+        const headLight = isWood ? '#b8853e' : (isIron ? '#ececec' : '#d6d6d6');
+        drawPixels([[6,3],[7,2],[8,2],[9,2],[10,2],[11,2],[12,3],[13,4]], headDark);
+        drawPixels([[5,4],[6,4],[7,3],[8,3],[9,3],[10,3],[11,3],[12,4],[14,5]], headMid);
+        drawPixels([[4,4],[5,3],[6,2],[7,1],[8,1],[9,1],[10,1],[11,1],[12,2],[13,3]], headLight);
+        drawPixels([[12,5],[12,6],[13,7],[13,8]], headDark);
         return canvas;
     }
 
@@ -291,6 +334,15 @@ export const blockIconColors = {
     sandstone: ['#b9b3a3', '#9e9888'],
     rope: ['#93a54f', '#839544'],
     stone_axe: ['#9fa5ad', '#838b95'],
+    stick: ['#8b5a2b', '#7a4e25'],
+    stone_pickaxe: ['#9fa5ad', '#838b95'],
+    stone_sword: ['#9fa5ad', '#838b95'],
+    wood_axe: ['#b88650', '#9b6d3f'],
+    wood_pickaxe: ['#b88650', '#9b6d3f'],
+    wood_sword: ['#b88650', '#9b6d3f'],
+    iron_axe: ['#d2d2d2', '#aeaeae'],
+    iron_pickaxe: ['#d2d2d2', '#aeaeae'],
+    iron_sword: ['#d2d2d2', '#aeaeae'],
     crafting_table: ['#8c6239', '#6f4a2d'],
     furnace: ['#6f6f6f', '#4e4e4e'],
     coal_ore: ['#4b4b4b', '#222222'],

@@ -2,7 +2,6 @@ body { margin: 0; overflow: hidden; background-color: #000; }
 
 #game-container { width: 100vw; height: 100vh; }
 
-/* 準心 */
 #crosshair {
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%);
@@ -12,43 +11,113 @@ body { margin: 0; overflow: hidden; background-color: #000; }
     z-index: 5;
 }
 
-/* 開始介面遮罩 - 加入泥土背景圖 */
 #overlay {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    /* 這裡使用 CSS 繪製重複的泥土像素圖樣 */
-    background-color: #3a2618;
-    background-image: 
-        linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), /* 深色遮罩 */
-        repeating-conic-gradient(#3a2618 0% 25%, #4a311f 0% 50%) 0% 0% / 64px 64px;
+    position: absolute;
+    inset: 0;
     display: flex;
-    justify-content: center; align-items: center; z-index: 10;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
+    background-color: #141414;
+    background-image:
+      radial-gradient(circle at 20% 15%, rgba(120, 175, 255, 0.35), transparent 40%),
+      radial-gradient(circle at 82% 80%, rgba(95, 225, 160, 0.18), transparent 42%),
+      linear-gradient(rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.65)),
+      repeating-linear-gradient(0deg, #2e2015 0px, #2e2015 2px, #372617 2px, #372617 4px),
+      repeating-linear-gradient(90deg, #3a2618 0px, #3a2618 2px, #422d1d 2px, #422d1d 4px);
+    background-size: auto, auto, auto, 48px 48px, 48px 48px;
 }
 
-/* 菜單選框 */
 #menu {
-    background: rgba(0, 0, 0, 0.8); /* 改成深色 Minecraft 風格 */
-    padding: 40px;
-    border: 4px solid #8b8b8b;
-    border-radius: 0px; /* 移除圓角，更有方塊感 */
+    width: min(92vw, 720px);
+    background: linear-gradient(#222, #191919);
+    border: 4px solid #0f0f0f;
+    box-shadow: 0 0 0 3px #595959, 0 0 0 6px #1e1e1e, 0 18px 45px rgba(0, 0, 0, .65);
+    padding: 24px 28px 18px;
     text-align: center;
-    font-family: 'Courier New', Courier, monospace; /* 使用等寬字體 */
-    color: white;
+    font-family: 'Trebuchet MS', 'Noto Sans TC', sans-serif;
+    color: #fff;
+    image-rendering: pixelated;
+}
+
+.menu-logo {
+    margin-bottom: 4px;
+}
+
+.menu-logo h1 {
+    margin: 0;
+    letter-spacing: 2px;
+    font-size: clamp(2.2rem, 6vw, 3.6rem);
+    text-transform: uppercase;
+    font-weight: 900;
+    color: #f2f2f2;
+    text-shadow:
+      0 3px 0 #b6b6b6,
+      0 6px 0 #6d6d6d,
+      0 9px 0 #3d3d3d,
+      0 11px 14px rgba(0, 0, 0, .85);
+}
+
+.menu-subtitle {
+    margin: 6px 0 18px;
+    color: #9eeaff;
+    font-size: .95rem;
+    letter-spacing: 1px;
+}
+
+.menu-splash {
+    display: inline-block;
+    margin: 0 0 12px;
+    padding: 2px 8px;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #ffe062;
+    text-shadow: 1px 1px 0 #6b4d00;
+    transform: rotate(-11deg);
+    animation: splash-pop 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes splash-pop {
+    from { transform: rotate(-11deg) scale(1); }
+    to { transform: rotate(-11deg) scale(1.12); }
+}
+
+.menu-actions {
+    display: grid;
+    gap: 10px;
+    width: min(100%, 360px);
+    margin: 0 auto;
 }
 
 #btn-play {
-    padding: 15px 30px; font-size: 20px; cursor: pointer;
-    background: #5dad44; color: white; border: 3px solid #333;
-    transition: background 0.2s;
+    padding: 12px 20px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    cursor: pointer;
+    background: linear-gradient(#7cc857, #4d932f);
+    color: #fff;
+    border: 2px solid #0f2f04;
+    box-shadow: inset 0 1px #b4eb92, inset 0 -2px #2e5f1c;
+    transition: transform .06s ease, filter .18s ease;
 }
 
-#btn-play:hover {
-    background: #77bc43;
+#btn-play:hover { filter: brightness(1.1); }
+#btn-play:active { transform: translateY(1px); }
+
+.menu-controls {
+    margin-top: 14px;
+    line-height: 1.65;
+    color: #d8d8d8;
+    font-size: .9rem;
 }
 
-/* 物品欄 (Hotbar) 樣式維持不變 */
-#hotbar {
-    border-radius: 0px !important;
+.menu-footer {
+    margin-top: 12px;
+    font-size: .78rem;
+    color: #9a9a9a;
 }
+
+#hotbar { border-radius: 0 !important; }
 
 .mc-inventory {position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25);z-index:20;font-family:monospace;}
 .mc-panel {width:520px;background:#c6c6c6;border:3px solid #222;box-shadow:inset 2px 2px #fff,inset -2px -2px #555;padding:12px;}
@@ -94,7 +163,6 @@ body { margin: 0; overflow: hidden; background-color: #000; }
 .furnace-left{display:grid;grid-template-rows:42px 42px;gap:8px;}
 .mc-furnace-progress{width:30px;height:10px;border:1px solid #333;background:#4a4a4a;position:relative;}
 #furnace-progress-fill{position:absolute;left:0;top:0;height:100%;width:0%;background:#e2b86b;}
-
 
 .mc-avatar-wrap{display:flex;gap:8px;align-items:flex-start;}
 .mc-equip-column{display:grid;grid-template-rows:repeat(4,42px);gap:6px;}
