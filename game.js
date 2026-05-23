@@ -14,9 +14,15 @@ const itemDefs = {
     stone: new BlockItem('stone', '石頭'),
     plank: new BlockItem('plank', '木板'),
     stone_axe: new BlockItem('stone_axe', '石斧'),
+    wood_axe: new BlockItem('wood_axe', '木斧'),
+    iron_axe: new BlockItem('iron_axe', '鐵斧'),
     stick: new BlockItem('stick', '木棍'),
     stone_pickaxe: new BlockItem('stone_pickaxe', '石鎬'),
+    wood_pickaxe: new BlockItem('wood_pickaxe', '木鎬'),
+    iron_pickaxe: new BlockItem('iron_pickaxe', '鐵鎬'),
     stone_sword: new BlockItem('stone_sword', '石劍'),
+    wood_sword: new BlockItem('wood_sword', '木劍'),
+    iron_sword: new BlockItem('iron_sword', '鐵劍'),
     rope: new BlockItem('rope', '草繩'),
     sandstone: new BlockItem('sandstone', '砂岩'),
     crafting_table: new BlockItem('crafting_table', '合成台'),
@@ -314,23 +320,30 @@ function matchStickRecipe() {
 
 function matchStoneToolRecipes() {
     if (craftSlots.length !== 9) return null;
+    const mats = [
+        { id: 'stone', key: 'stone', zh: '石' },
+        { id: 'plank', key: 'wood', zh: '木' },
+        { id: 'iron', key: 'iron', zh: '鐵' }
+    ];
     const at = (r, c, id) => {
         const slot = craftSlots[r * 3 + c];
         return slot && slot.itemId === id;
     };
     const emptyElse = (allowed) => craftSlots.every((slot, i) => !slot || allowed.has(i));
 
-    const axeAllowed = new Set([0, 1, 3, 4, 7]);
-    if (at(0,0,'stone') && at(0,1,'stone') && at(1,0,'stone') && at(1,1,'stick') && at(2,1,'stick') && emptyElse(axeAllowed)) {
-        return { output: { itemId: 'stone_axe', amount: 1 } };
-    }
+    for (const mat of mats) {
+        const m = mat.id;
+        if (at(0,0,m) && at(0,1,m) && at(1,0,m) && at(1,1,'stick') && at(2,1,'stick') && emptyElse(new Set([0,1,3,4,7]))) {
+            return { output: { itemId: `${mat.key}_axe`, amount: 1 } };
+        }
 
-    if (at(0,0,'stone') && at(0,1,'stone') && at(0,2,'stone') && at(1,1,'stick') && at(2,1,'stick') && emptyElse(new Set([0,1,2,4,7]))) {
-        return { output: { itemId: 'stone_pickaxe', amount: 1 } };
-    }
+        if (at(0,0,m) && at(0,1,m) && at(0,2,m) && at(1,1,'stick') && at(2,1,'stick') && emptyElse(new Set([0,1,2,4,7]))) {
+            return { output: { itemId: `${mat.key}_pickaxe`, amount: 1 } };
+        }
 
-    if (at(0,1,'stone') && at(1,1,'stone') && at(2,1,'stick') && emptyElse(new Set([1,4,7]))) {
-        return { output: { itemId: 'stone_sword', amount: 1 } };
+        if (at(0,1,m) && at(1,1,m) && at(2,1,'stick') && emptyElse(new Set([1,4,7]))) {
+            return { output: { itemId: `${mat.key}_sword`, amount: 1 } };
+        }
     }
 
     return null;
