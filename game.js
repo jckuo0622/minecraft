@@ -1015,7 +1015,9 @@ function animate() {
     if (inventoryOpen && craftingMode === "furnace") renderFurnace();
 
     if (controls.isLocked) {
-        if (isThirdPerson) camera.position.copy(playerAnchor);
+        if (isThirdPerson) {
+            camera.position.set(playerAnchor.x, playerAnchor.y + currentHeight, playerAnchor.z);
+        }
         updateWorld();
         processQueue();
         flushChunkBuildQueue();
