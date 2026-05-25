@@ -69,6 +69,9 @@ const furnaceInputEl = document.getElementById('furnace-input');
 const furnaceFuelEl = document.getElementById('furnace-fuel');
 const furnaceOutputEl = document.getElementById('furnace-output');
 const furnaceProgressFillEl = document.getElementById('furnace-progress-fill');
+const fpHandEl = document.getElementById('first-person-hand');
+const fpHeldItemEl = document.getElementById('fp-held-item');
+
 let inventoryOpen = false;
 let craftingMode = 'inventory'; // inventory | table | furnace
 let openedInventoryFromLock = false;
@@ -77,6 +80,9 @@ let craftSlots = Array.from({ length: 4 }, () => null);
 let activeFurnaceKey = null;
 const furnaceStates = new Map();
 const equipment = { helmet: null, chest: null, legs: null, boots: null };
+let selectedIdx = 0;
+let isThirdPerson = false;
+let lastViewToggleAt = 0;
 
 
 function setCraftMode(mode) {
@@ -211,6 +217,7 @@ function renderEquipment() {
             renderInventory(); renderHotbar(); renderEquipment();
         };
     });
+    renderHeldItemInHand();
 }
 
 function setCraftMessage(msg) {
@@ -244,6 +251,7 @@ function renderInventory() {
             renderQuickCraft();
         });
     });
+    renderHeldItemInHand();
 }
 
 
@@ -491,6 +499,7 @@ function renderQuickCraft() {
         row.appendChild(btn);
         quickCraftList.appendChild(row);
     });
+    renderHeldItemInHand();
 }
 
 function toggleInventory(mode = 'inventory') {
@@ -504,6 +513,7 @@ function toggleInventory(mode = 'inventory') {
             controls.unlock(); // 開背包時解鎖游標
         }
         inventoryPanel.classList.add('open');
+        fpHandEl.style.display = 'none';
         renderInventory();
         renderCrafting();
         renderFurnace();
@@ -513,6 +523,7 @@ function toggleInventory(mode = 'inventory') {
         setCraftMessage('');
     } else {
         inventoryPanel.classList.remove('open');
+        fpHandEl.style.display = controls.isLocked ? 'block' : 'none';
         if (openedInventoryFromLock) {
             controls.lock(); // 關背包時回到遊戲鎖定
         }
@@ -562,6 +573,7 @@ const dropSystem = createDropSystem({
     getMaterials,
     onInventoryUpdated: () => {
         renderHotbar();
+        renderHeldItemInHand();
         if (inventoryOpen) { renderInventory(); renderCrafting(); }
     },
     getPlayerFeetY: () => camera.position.y - currentHeight
@@ -652,6 +664,7 @@ function updateNeighbors(x, y, z) {
             addBlockMesh(m);
         }
     });
+    renderHeldItemInHand();
 }
 
 // 生成區塊（改為由 Worker 負責地圖資料計算）
@@ -665,6 +678,7 @@ function spawnChunk(cx, cz) {
         cz,
         removedBlocks: Array.from(removedBlocks)
     });
+    renderHeldItemInHand();
 }
 
 worldWorker.onmessage = (event) => {
@@ -740,6 +754,7 @@ function renderHotbar() {
         icon.style.backgroundImage = `url(${itemIconDataUrl[entry.itemId] || ''})`;
         label.textContent = `x${entry.count}`;
     });
+    renderHeldItemInHand();
 }
 
 for (let i = 0; i < 9; i++) {
@@ -760,6 +775,24 @@ for (let i = 0; i < 9; i++) {
     slots.push(slot);
 }
 
+function playHandSwing() {
+    if (!controls.isLocked || inventoryOpen) return;
+    fpHandEl.classList.remove('swing');
+    void fpHandEl.offsetWidth;
+    fpHandEl.classList.add('swing');
+}
+
+function renderHeldItemInHand() {
+    const selectedSlot = inventory.getSlots(27, 36)[selectedIdx];
+    if (!selectedSlot) {
+        fpHeldItemEl.style.backgroundImage = '';
+        fpHandEl.classList.remove('has-item');
+        return;
+    }
+    fpHeldItemEl.style.backgroundImage = `url(${itemIconDataUrl[selectedSlot.itemId] || ''})`;
+    fpHandEl.classList.add('has-item');
+}
+
 function updateSelection(idx) {
     slots.forEach((s, i) => {
         if (i === idx) {
@@ -772,10 +805,12 @@ function updateSelection(idx) {
             s.style.transform = 'scale(1)';
         }
     });
+    renderHeldItemInHand();
 }
 renderHotbar();
 renderEquipment();
 updateSelection(0);
+renderHeldItemInHand();
 
 // --- D. 控制與點擊 ---
 document.getElementById('btn-play').addEventListener('click', () => controls.lock());
@@ -783,6 +818,8 @@ controls.addEventListener('lock', () => {
     overlay.style.display = 'none';
     crosshair.style.display = inventoryOpen ? 'none' : 'block';
     hotbar.style.display = 'flex';
+    fpHandEl.style.display = (inventoryOpen || isThirdPerson) ? 'none' : 'block';
+    playerModel.visible = isThirdPerson;
 });
 controls.addEventListener('unlock', () => {
     if (unlockingForInventory) {
@@ -790,14 +827,16 @@ controls.addEventListener('unlock', () => {
         overlay.style.display = 'none';
         crosshair.style.display = 'none';
         hotbar.style.display = 'flex';
+        fpHandEl.style.display = 'none';
         return;
     }
     overlay.style.display = 'flex';
     crosshair.style.display = 'none';
     hotbar.style.display = 'none';
+    fpHandEl.style.display = 'none';
+    playerModel.visible = false;
 });
 
-let selectedIdx = 0;
 const velocity = new THREE.Vector3();
 const playerRadius = 0.35;
 let canJump = false, isCrouching = false, currentHeight = 1.8;
@@ -811,6 +850,16 @@ document.addEventListener('keydown', (e) => {
     }
     if (e.code === 'KeyE') {
         toggleInventory('inventory');
+        return;
+    }
+    if (e.code === 'KeyQ') {
+        if (e.repeat) return;
+        const now = performance.now();
+        if (now - lastViewToggleAt < 180) return;
+        lastViewToggleAt = now;
+        isThirdPerson = !isThirdPerson;
+        playerModel.visible = isThirdPerson && controls.isLocked;
+        fpHandEl.style.display = (!isThirdPerson && controls.isLocked && !inventoryOpen) ? 'block' : 'none';
         return;
     }
     if (e.code === 'Space' && canJump) {
@@ -833,6 +882,7 @@ window.addEventListener('wheel', (e) => {
 
 window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
+    playHandSwing();
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
     const interactableBlocks = getNearbyBlocks(camera.position.x, camera.position.z, 4);
@@ -922,6 +972,49 @@ sun.position.set(10, 20, 10);
 scene.add(sun);
 camera.position.set(0, 30, 0);
 
+const playerAnchor = new THREE.Vector3(0, 30, 0);
+const thirdPersonDistance = 4.2;
+const thirdPersonFrontDistance = 3.2;
+
+function createPlayerModel() {
+    const g = new THREE.Group();
+    const skin = new THREE.MeshLambertMaterial({ color: 0xe0b18d });
+    const shirt = new THREE.MeshLambertMaterial({ color: 0x39a0ff });
+    const pants = new THREE.MeshLambertMaterial({ color: 0x3f4a5d });
+    const faceTex = new THREE.TextureLoader().load('./player-face.png');
+    faceTex.magFilter = THREE.NearestFilter;
+    faceTex.minFilter = THREE.NearestFilter;
+    const faceMat = new THREE.MeshLambertMaterial({ map: faceTex });
+    const headMats = [skin, skin, skin, skin, faceMat, faceMat];
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.56, 0.56), headMats);
+    head.position.y = 1.55;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.72, 0.3), shirt);
+    body.position.y = 1.02;
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), skin);
+    armL.position.set(-0.4, 1.03, 0);
+    const armR = armL.clone();
+    armR.position.x = 0.4;
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.72, 0.24), pants);
+    legL.position.set(-0.16, 0.32, 0);
+    const legR = legL.clone();
+    legR.position.x = 0.16;
+    g.add(head, body, armL, armR, legL, legR);
+    g.userData = {
+        head,
+        armL,
+        armR,
+        legL,
+        legR,
+        walkPhase: 0,
+        lastPos: new THREE.Vector3()
+    };
+    g.visible = false;
+    return g;
+}
+
+const playerModel = createPlayerModel();
+scene.add(playerModel);
+
 let prevT = performance.now();
 function animate() {
     requestAnimationFrame(animate);
@@ -932,6 +1025,9 @@ function animate() {
     if (inventoryOpen && craftingMode === "furnace") renderFurnace();
 
     if (controls.isLocked) {
+        if (isThirdPerson) {
+            camera.position.set(playerAnchor.x, playerAnchor.y + currentHeight, playerAnchor.z);
+        }
         updateWorld();
         processQueue();
         flushChunkBuildQueue();
@@ -986,6 +1082,35 @@ function animate() {
             velocity.y = 0; camera.position.y = groundH + currentHeight; canJump = true;
         } else if (groundH !== -999) { canJump = false; }
         if (camera.position.y < -30) camera.position.set(0, 30, 0);
+
+        playerAnchor.set(camera.position.x, camera.position.y - currentHeight, camera.position.z);
+        const viewDir = new THREE.Vector3();
+        camera.getWorldDirection(viewDir);
+        viewDir.y = 0;
+        if (viewDir.lengthSq() > 0.0001) {
+            playerModel.rotation.y = Math.atan2(viewDir.x, viewDir.z) + Math.PI;
+        }
+        playerModel.position.copy(playerAnchor);
+
+        const pdata = playerModel.userData;
+        const horizontalSpeed = Math.hypot(velocity.x, velocity.z);
+        pdata.walkPhase += dt * Math.min(10, horizontalSpeed * 0.45 + 2.5);
+        const swing = horizontalSpeed > 0.2 ? Math.sin(pdata.walkPhase) * 0.65 : 0;
+        pdata.legL.rotation.x = swing;
+        pdata.legR.rotation.x = -swing;
+        pdata.armL.rotation.x = -swing * 0.75;
+        pdata.armR.rotation.x = swing * 0.75;
+
+        if (isThirdPerson) {
+            const front = viewDir.lengthSq() > 0.0001 ? viewDir.clone().normalize() : new THREE.Vector3(0, 0, 1);
+            camera.position.set(
+                playerAnchor.x + front.x * thirdPersonFrontDistance,
+                playerAnchor.y + 1.7,
+                playerAnchor.z + front.z * thirdPersonFrontDistance
+            );
+            camera.lookAt(playerAnchor.x, playerAnchor.y + 1.35, playerAnchor.z);
+            fpHandEl.style.display = 'none';
+        }
     }
     renderer.render(scene, camera);
 }
