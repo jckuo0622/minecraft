@@ -777,11 +777,11 @@ function renderHeldItemInHand() {
     const selectedSlot = inventory.getSlots(27, 36)[selectedIdx];
     if (!selectedSlot) {
         fpHeldItemEl.style.backgroundImage = '';
-        fpHeldItemEl.style.display = 'none';
+        fpHandEl.classList.remove('has-item');
         return;
     }
-    fpHeldItemEl.style.display = 'block';
     fpHeldItemEl.style.backgroundImage = `url(${itemIconDataUrl[selectedSlot.itemId] || ''})`;
+    fpHandEl.classList.add('has-item');
 }
 
 function updateSelection(idx) {
