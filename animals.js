@@ -70,16 +70,19 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
     const spawnedAnimalCells = new Set();
 
     function animalCellKey(x, z) {
-        return `${Math.floor(x / 12)},${Math.floor(z / 12)}`;
+        return `${Math.floor(x / 10)},${Math.floor(z / 10)}`;
     }
 
     function spawnAnimalsNearPlayer(maxAnimals = 18) {
-        if (animals.length >= maxAnimals) return;
+        const dynamicMaxAnimals = Math.max(maxAnimals, 28);
+        if (animals.length >= dynamicMaxAnimals) return;
         const px = Math.floor(camera.position.x);
         const pz = Math.floor(camera.position.z);
-        for (let i = 0; i < 2 && animals.length < maxAnimals; i++) {
-            const rx = px + Math.floor((Math.random() - 0.5) * 44);
-            const rz = pz + Math.floor((Math.random() - 0.5) * 44);
+        for (let i = 0; i < 4 && animals.length < dynamicMaxAnimals; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = 10 + Math.random() * 24;
+            const rx = Math.floor(px + Math.cos(angle) * distance);
+            const rz = Math.floor(pz + Math.sin(angle) * distance);
             const cell = animalCellKey(rx, rz);
             if (spawnedAnimalCells.has(cell)) continue;
             const y = getSurfaceHeightApprox(rx, rz) + 0.01;
@@ -193,7 +196,17 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
 
             const dx = mob.position.x - camera.position.x;
             const dz = mob.position.z - camera.position.z;
-            if (dx * dx + dz * dz > 110 * 110) {
+            const distSq = dx * dx + dz * dz;
+
+            if (distSq < 12 * 12 && data.blockedTurnCooldown <= 0.05) {
+                const away = new THREE.Vector3(dx, 0, dz);
+                if (away.lengthSq() > 0.0001) {
+                    away.normalize();
+                    data.direction.lerp(away, 0.35).normalize();
+                }
+            }
+
+            if (distSq > 110 * 110) {
                 scene.remove(mob);
                 animals.splice(i, 1);
                 spawnedAnimalCells.delete(animalCellKey(mob.position.x, mob.position.z));
