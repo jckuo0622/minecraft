@@ -1,7 +1,533 @@
 import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
 import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/PointerLockControls.js';
-import { getMaterials, getPixelCanvas, blockIconColors } from './textures.js';
-import { getGroundAt, checkWall } from './physics.js';
+import { getMaterials, getPixelCanvas, blockIconColors, getItemIconCanvas } from './textures.js';
+import { getGroundAt, checkWall, checkCapsuleWall } from './physics.js';
+import { BlockItem, Inventory, CraftingRecipe, CraftingManager } from './inventory.js';
+import { createAnimalSystem } from './animals.js';
+import { createDropSystem } from './drops.js';
+
+
+const itemDefs = {
+    wood: new BlockItem('wood', '木頭'),
+    sand: new BlockItem('sand', '沙子'),
+    leaf: new BlockItem('leaf', '樹葉'),
+    stone: new BlockItem('stone', '石頭'),
+    plank: new BlockItem('plank', '木板'),
+    stone_axe: new BlockItem('stone_axe', '石斧'),
+    wood_axe: new BlockItem('wood_axe', '木斧'),
+    iron_axe: new BlockItem('iron_axe', '鐵斧'),
+    stick: new BlockItem('stick', '木棍'),
+    stone_pickaxe: new BlockItem('stone_pickaxe', '石鎬'),
+    wood_pickaxe: new BlockItem('wood_pickaxe', '木鎬'),
+    iron_pickaxe: new BlockItem('iron_pickaxe', '鐵鎬'),
+    stone_sword: new BlockItem('stone_sword', '石劍'),
+    wood_sword: new BlockItem('wood_sword', '木劍'),
+    iron_sword: new BlockItem('iron_sword', '鐵劍'),
+    rope: new BlockItem('rope', '草繩'),
+    sandstone: new BlockItem('sandstone', '砂岩'),
+    crafting_table: new BlockItem('crafting_table', '合成台'),
+    furnace: new BlockItem('furnace', '熔爐'),
+    coal_ore: new BlockItem('coal_ore', '煤礦'),
+    iron_ore: new BlockItem('iron_ore', '鐵礦'),
+    iron: new BlockItem('iron', '鐵錠'),
+    wood_helmet: new BlockItem('wood_helmet', '木頭帽子'),
+    wood_chest: new BlockItem('wood_chest', '木頭護甲'),
+    wood_legs: new BlockItem('wood_legs', '木頭護腿'),
+    wood_boots: new BlockItem('wood_boots', '木頭鞋子'),
+    iron_helmet: new BlockItem('iron_helmet', '鐵帽子'),
+    iron_chest: new BlockItem('iron_chest', '鐵護甲'),
+    iron_legs: new BlockItem('iron_legs', '鐵護腿'),
+    iron_boots: new BlockItem('iron_boots', '鐵鞋子')
+};
+
+const itemIconDataUrl = {};
+Object.keys(blockIconColors).forEach((id) => {
+    const colors = blockIconColors[id];
+    const cv = getItemIconCanvas(id);
+    itemIconDataUrl[id] = cv.toDataURL();
+});
+
+const inventory = new Inventory();
+const craftingManager = new CraftingManager(inventory);
+craftingManager.addRecipe(new CraftingRecipe('plank_recipe', '木頭 x1 → 木板 x4', [{ itemId: 'wood', amount: 1 }], { itemId: 'plank', amount: 4 }));
+craftingManager.addRecipe(new CraftingRecipe('rope_recipe', '樹葉 x2 → 草繩 x1', [{ itemId: 'leaf', amount: 2 }], { itemId: 'rope', amount: 1 }));
+craftingManager.addRecipe(new CraftingRecipe('crafting_table_recipe', '木板 x4 → 合成台 x1', [{ itemId: 'plank', amount: 4 }], { itemId: 'crafting_table', amount: 1 }));
+craftingManager.addRecipe(new CraftingRecipe('furnace_recipe', '石頭 x8 → 熔爐 x1', [{ itemId: 'stone', amount: 8 }], { itemId: 'furnace', amount: 1 }));
+craftingManager.addRecipe(new CraftingRecipe('sandstone_recipe', '沙子 x2 + 石頭 x1 → 砂岩 x1', [{ itemId: 'sand', amount: 2 }, { itemId: 'stone', amount: 1 }], { itemId: 'sandstone', amount: 1 }));
+
+const inventoryPanel = document.getElementById('inventory-panel');
+const inventoryList = document.getElementById('inventory-list');
+const inventoryHotbarGrid = document.getElementById('inventory-hotbar-grid');
+const craftingMessage = document.getElementById('crafting-message');
+const craftResultEl = document.getElementById('craft-result');
+const quickCraftList = document.getElementById('quick-craft-list');
+const craftGridEl = document.getElementById('craft-grid');
+const craftingTitleEl = document.getElementById('crafting-title');
+const craftingAreaEl = document.getElementById('crafting-area');
+const furnaceAreaEl = document.getElementById('furnace-area');
+const furnaceInputEl = document.getElementById('furnace-input');
+const furnaceFuelEl = document.getElementById('furnace-fuel');
+const furnaceOutputEl = document.getElementById('furnace-output');
+const furnaceProgressFillEl = document.getElementById('furnace-progress-fill');
+const fpHandEl = document.getElementById('first-person-hand');
+const fpHeldItemEl = document.getElementById('fp-held-item');
+
+let inventoryOpen = false;
+let craftingMode = 'inventory'; // inventory | table | furnace
+let openedInventoryFromLock = false;
+let unlockingForInventory = false;
+let craftSlots = Array.from({ length: 4 }, () => null);
+let activeFurnaceKey = null;
+const furnaceStates = new Map();
+const equipment = { helmet: null, chest: null, legs: null, boots: null };
+let selectedIdx = 0;
+
+
+function setCraftMode(mode) {
+    craftingMode = mode;
+    const size = craftingMode === 'table' ? 3 : 2;
+    craftingAreaEl.style.display = craftingMode === 'furnace' ? 'none' : 'block';
+    furnaceAreaEl.style.display = craftingMode === 'furnace' ? 'block' : 'none';
+    craftSlots = Array.from({ length: size * size }, () => null);
+    craftGridEl.style.gridTemplateColumns = `repeat(${size},42px)`;
+    craftingTitleEl.textContent = `${size}x${size}`;
+    craftGridEl.innerHTML = '';
+    for (let i = 0; i < craftSlots.length; i++) {
+        const el = document.createElement('div');
+        el.className = 'slot craft-slot';
+        el.dataset.cslot = String(i);
+        craftGridEl.appendChild(el);
+    }
+}
+
+
+function getFurnaceState(key) {
+    if (!furnaceStates.has(key)) furnaceStates.set(key, { input: null, fuel: null, output: null, progress: 0, burnTime: 0 });
+    return furnaceStates.get(key);
+}
+
+function fuelTime(itemId) {
+    if (itemId === 'coal_ore') return 12;
+    if (itemId === 'wood' || itemId === 'plank') return 5;
+    return 0;
+}
+
+function smeltResult(itemId) {
+    if (itemId === 'wood') return 'coal_ore';
+    if (itemId === 'iron_ore') return 'iron';
+    return null;
+}
+
+function renderFurnaceSlot(el, slot) {
+    if (!slot) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="mc-item-icon" style="background-image:url(${itemIconDataUrl[slot.itemId] || ''})"></div><span style="position:absolute;right:4px;bottom:2px;color:white;font-size:10px;">x${slot.count}</span>`;
+}
+
+
+function canPlaceInFurnace(slotType, itemId) {
+    if (slotType === 'fuel') return fuelTime(itemId) > 0;
+    if (slotType === 'input') return smeltResult(itemId) !== null;
+    return false;
+}
+
+function moveOneFromInventoryToFurnace(invIndex, slotType) {
+    if (!activeFurnaceKey) return;
+    const invSlot = inventory.slots[invIndex];
+    if (!invSlot || !canPlaceInFurnace(slotType, invSlot.itemId)) return;
+    const f = getFurnaceState(activeFurnaceKey);
+    const target = slotType === 'fuel' ? 'fuel' : 'input';
+    if (!f[target]) f[target] = { itemId: invSlot.itemId, count: 0 };
+    if (f[target].itemId !== invSlot.itemId) return;
+    inventory.remove(invSlot.itemId, 1);
+    f[target].count += 1;
+}
+
+function bindFurnaceSlot(el, slotType) {
+    el.ondragover = (e) => e.preventDefault();
+    el.ondrop = (e) => {
+        e.preventDefault();
+        if (!activeFurnaceKey || !inventoryOpen || craftingMode !== 'furnace') return;
+        const from = Number(e.dataTransfer.getData('text/plain'));
+        if (Number.isNaN(from)) return;
+        moveOneFromInventoryToFurnace(from, slotType);
+        renderInventory(); renderHotbar(); renderFurnace();
+    };
+    el.onclick = () => {
+        if (!activeFurnaceKey || !inventoryOpen || craftingMode !== 'furnace') return;
+        const f = getFurnaceState(activeFurnaceKey);
+        const target = slotType === 'fuel' ? 'fuel' : 'input';
+        if (!f[target]) return;
+        inventory.add(f[target].itemId, 1, true);
+        f[target].count -= 1;
+        if (f[target].count <= 0) f[target] = null;
+        renderInventory(); renderHotbar(); renderFurnace();
+    };
+}
+
+function renderFurnace() {
+    if (!activeFurnaceKey) return;
+    const f = getFurnaceState(activeFurnaceKey);
+    renderFurnaceSlot(furnaceInputEl, f.input);
+    renderFurnaceSlot(furnaceFuelEl, f.fuel);
+    renderFurnaceSlot(furnaceOutputEl, f.output);
+    const pct = Math.max(0, Math.min(100, (f.progress / 3.5) * 100));
+    furnaceProgressFillEl.style.width = `${pct}%`;
+}
+
+
+function armorSlotForItem(itemId) {
+    if (!itemId) return null;
+    if (itemId.endsWith('_helmet')) return 'helmet';
+    if (itemId.endsWith('_chest')) return 'chest';
+    if (itemId.endsWith('_legs')) return 'legs';
+    if (itemId.endsWith('_boots')) return 'boots';
+    return null;
+}
+
+function renderEquipment() {
+    document.querySelectorAll('.equip-slot').forEach((el) => {
+        const slot = el.dataset.equip;
+        const equipped = equipment[slot];
+        if (!equipped) el.innerHTML = '';
+        else el.innerHTML = `<div class="mc-item-icon" style="background-image:url(${itemIconDataUrl[equipped.itemId] || ''})"></div><span style="position:absolute;right:4px;bottom:2px;color:white;font-size:10px;">x1</span>`;
+
+        el.ondragover = (e) => e.preventDefault();
+        el.ondrop = (e) => {
+            e.preventDefault();
+            const from = Number(e.dataTransfer.getData('text/plain'));
+            if (Number.isNaN(from)) return;
+            const invSlot = inventory.slots[from];
+            if (!invSlot || invSlot.count < 1) return;
+            const want = armorSlotForItem(invSlot.itemId);
+            if (want !== slot) return;
+            if (equipment[slot]) {
+                inventory.add(equipment[slot].itemId, 1, false);
+            }
+            inventory.remove(invSlot.itemId, 1);
+            equipment[slot] = { itemId: invSlot.itemId };
+            renderInventory(); renderHotbar(); renderEquipment();
+        };
+
+        el.onclick = () => {
+            if (!equipment[slot]) return;
+            inventory.add(equipment[slot].itemId, 1, false);
+            equipment[slot] = null;
+            renderInventory(); renderHotbar(); renderEquipment();
+        };
+    });
+    renderHeldItemInHand();
+}
+
+function setCraftMessage(msg) {
+    craftingMessage.textContent = msg;
+}
+
+function slotHtml(slot, slotIndex) {
+    if (!slot) return `<div class="mc-item-slot" draggable="true" data-slot="${slotIndex}"></div>`;
+    return `<div class="mc-item-slot" draggable="true" data-slot="${slotIndex}"><span class="mc-item-name">${itemDefs[slot.itemId]?.nameZh || slot.itemId}</span><div class="mc-item-icon" style="background-image:url(${itemIconDataUrl[slot.itemId] || ''})"></div><span>x${slot.count}</span></div>`;
+}
+
+function renderInventory() {
+    const bagSlots = inventory.getSlots(0, 27);
+    const hotbarSlots = inventory.getSlots(27, 36);
+    inventoryList.innerHTML = bagSlots.map((slot, i) => slotHtml(slot, i)).join('');
+    inventoryHotbarGrid.innerHTML = hotbarSlots.map((slot, i) => slotHtml(slot, 27 + i)).join('');
+
+    document.querySelectorAll('.mc-item-slot').forEach((el) => {
+        el.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', el.dataset.slot);
+        });
+        el.addEventListener('dragover', (e) => e.preventDefault());
+        el.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const from = Number(e.dataTransfer.getData('text/plain'));
+            const to = Number(el.dataset.slot);
+            inventory.moveSlot(from, to);
+            renderInventory();
+            renderHotbar();
+            renderEquipment();
+            renderQuickCraft();
+        });
+    });
+    renderHeldItemInHand();
+}
+
+
+function matchArmorRecipe() {
+    if (craftSlots.length !== 9) return null;
+    const mats = ['plank', 'iron'];
+    const at = (r, c) => craftSlots[r * 3 + c];
+    for (const mat of mats) {
+        const hasOnly = () => craftSlots.every(sl => !sl || sl.itemId === mat);
+        if (!hasOnly()) continue;
+
+        // helmet: top row 3 + mid left/right
+        if (at(0,0)&&at(0,1)&&at(0,2)&&at(1,0)&&at(1,2) && !at(1,1) && !at(2,0)&&!at(2,1)&&!at(2,2)) {
+            return { output: { itemId: `${mat === 'plank' ? 'wood' : 'iron'}_helmet`, amount: 1 } };
+        }
+        // chest: except top middle empty
+        const chestNeed=[[0,0],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]];
+        const chestOk=chestNeed.every(([r,c])=>at(r,c)) && !at(0,1);
+        if (chestOk) return { output: { itemId: `${mat === 'plank' ? 'wood' : 'iron'}_chest`, amount: 1 } };
+
+        // legs: top row3 + mid left/right + bot left/right
+        if (at(0,0)&&at(0,1)&&at(0,2)&&at(1,0)&&at(1,2)&&at(2,0)&&at(2,2) && !at(1,1)&&!at(2,1)) {
+            return { output: { itemId: `${mat === 'plank' ? 'wood' : 'iron'}_legs`, amount: 1 } };
+        }
+
+        // boots: two columns left/right bottom two rows
+        if (at(1,0)&&at(2,0)&&at(1,2)&&at(2,2) && !at(0,0)&&!at(0,1)&&!at(0,2)&&!at(1,1)&&!at(2,1)) {
+            return { output: { itemId: `${mat === 'plank' ? 'wood' : 'iron'}_boots`, amount: 1 } };
+        }
+    }
+    return null;
+}
+
+function isRecipeLargerThan2x2(recipe) {
+    const totalInputs = recipe.inputs.reduce((sum, input) => sum + input.amount, 0);
+    return totalInputs > 4;
+}
+
+function matchStickRecipe() {
+    const size = Math.sqrt(craftSlots.length);
+    if (size !== 2 && size !== 3) return null;
+    const need = new Set();
+    if (size === 2) {
+        for (let c = 0; c < 2; c++) {
+            need.clear();
+            need.add(0 * 2 + c);
+            need.add(1 * 2 + c);
+            let ok = true;
+            for (let i = 0; i < craftSlots.length; i++) {
+                const slot = craftSlots[i];
+                if (need.has(i)) { if (!slot || slot.itemId !== 'plank') ok = false; }
+                else if (slot) ok = false;
+            }
+            if (ok) return { output: { itemId: 'stick', amount: 4 } };
+        }
+        return null;
+    }
+    for (let c = 0; c < 3; c++) {
+        for (let r = 0; r < 2; r++) {
+            need.clear();
+            need.add(r * 3 + c);
+            need.add((r + 1) * 3 + c);
+            let ok = true;
+            for (let i = 0; i < craftSlots.length; i++) {
+                const slot = craftSlots[i];
+                if (need.has(i)) { if (!slot || slot.itemId !== 'plank') ok = false; }
+                else if (slot) ok = false;
+            }
+            if (ok) return { output: { itemId: 'stick', amount: 4 } };
+        }
+    }
+    return null;
+}
+
+function matchStoneToolRecipes() {
+    if (craftSlots.length !== 9) return null;
+    const mats = [
+        { id: 'stone', key: 'stone', zh: '石' },
+        { id: 'plank', key: 'wood', zh: '木' },
+        { id: 'iron', key: 'iron', zh: '鐵' }
+    ];
+    const at = (r, c, id) => {
+        const slot = craftSlots[r * 3 + c];
+        return slot && slot.itemId === id;
+    };
+    const emptyElse = (allowed) => craftSlots.every((slot, i) => !slot || allowed.has(i));
+
+    for (const mat of mats) {
+        const m = mat.id;
+        if (at(0,0,m) && at(0,1,m) && at(1,0,m) && at(1,1,'stick') && at(2,1,'stick') && emptyElse(new Set([0,1,3,4,7]))) {
+            return { output: { itemId: `${mat.key}_axe`, amount: 1 } };
+        }
+
+        if (at(0,0,m) && at(0,1,m) && at(0,2,m) && at(1,1,'stick') && at(2,1,'stick') && emptyElse(new Set([0,1,2,4,7]))) {
+            return { output: { itemId: `${mat.key}_pickaxe`, amount: 1 } };
+        }
+
+        if (at(0,1,m) && at(1,1,m) && at(2,1,'stick') && emptyElse(new Set([1,4,7]))) {
+            return { output: { itemId: `${mat.key}_sword`, amount: 1 } };
+        }
+    }
+
+    return null;
+}
+
+function getCraftResult() {
+    const stickRecipe = matchStickRecipe();
+    if (stickRecipe) return stickRecipe;
+
+    const size = Math.sqrt(craftSlots.length);
+
+    if (size === 3) {
+        const armorRecipe = matchArmorRecipe();
+        if (armorRecipe) return armorRecipe;
+        const stoneToolRecipe = matchStoneToolRecipes();
+        if (stoneToolRecipe) return stoneToolRecipe;
+        const isPlankAt = (r, c) => {
+            const slot = craftSlots[r * 3 + c];
+            return slot && slot.itemId === 'plank' && slot.count >= 1;
+        };
+        for (let r = 0; r < 2; r++) {
+            for (let c = 0; c < 2; c++) {
+                const matches2x2 = isPlankAt(r, c) && isPlankAt(r, c + 1) && isPlankAt(r + 1, c) && isPlankAt(r + 1, c + 1);
+                if (!matches2x2) continue;
+                let otherCount = 0;
+                for (let i = 0; i < craftSlots.length; i++) {
+                    const rr = Math.floor(i / 3), cc = i % 3;
+                    const inSquare = rr >= r && rr <= r + 1 && cc >= c && cc <= c + 1;
+                    if (!inSquare && craftSlots[i]) otherCount++;
+                }
+                if (otherCount === 0) {
+                    return { id: 'crafting_table_from_grid', output: { itemId: 'crafting_table', amount: 1 } };
+                }
+            }
+        }
+    }
+
+    const counts = new Map();
+    for (const slot of craftSlots) {
+        if (!slot) continue;
+        counts.set(slot.itemId, (counts.get(slot.itemId) || 0) + slot.count);
+    }
+
+    for (const recipe of craftingManager.recipes) {
+        if (craftingMode !== 'table' && isRecipeLargerThan2x2(recipe)) continue;
+        const needs = new Map(recipe.inputs.map(i => [i.itemId, i.amount]));
+        if (counts.size !== needs.size) continue;
+        let ok = true;
+        for (const [id, amount] of needs) {
+            if ((counts.get(id) || 0) !== amount) { ok = false; break; }
+        }
+        if (ok) return recipe;
+    }
+    return null;
+}
+
+function renderCrafting() {
+    document.querySelectorAll('.craft-slot').forEach((el) => {
+        const idx = Number(el.dataset.cslot);
+        const slot = craftSlots[idx];
+        if (!slot) el.innerHTML = '';
+        else el.innerHTML = `<div class="mc-item-icon" style="background-image:url(${itemIconDataUrl[slot.itemId] || ''})"></div><span style="position:absolute;right:4px;bottom:2px;color:white;font-size:10px;">x${slot.count}</span>`;
+
+        el.ondragover = (e) => e.preventDefault();
+        el.ondrop = (e) => {
+            e.preventDefault();
+            const from = Number(e.dataTransfer.getData('text/plain'));
+            if (Number.isNaN(from)) return;
+            const invSlot = inventory.slots[from];
+            if (!invSlot) return;
+            craftSlots[idx] = { itemId: invSlot.itemId, count: 1 };
+            inventory.remove(invSlot.itemId, 1);
+            renderInventory();
+            renderHotbar();
+            renderEquipment();
+            renderQuickCraft();
+            renderCrafting();
+        renderFurnace();
+            renderQuickCraft();
+        };
+        el.onclick = () => {
+            const c = craftSlots[idx];
+            if (!c) return;
+            inventory.add(c.itemId, c.count, false);
+            craftSlots[idx] = null;
+            renderInventory(); renderHotbar(); renderCrafting(); renderQuickCraft();
+        };
+    });
+
+    const recipe = getCraftResult();
+    if (!recipe) {
+        craftResultEl.innerHTML = '';
+        craftResultEl.onclick = null;
+        return;
+    }
+    craftResultEl.innerHTML = `<div class="mc-item-icon" style="background-image:url(${itemIconDataUrl[recipe.output.itemId] || ''})"></div><span style="position:absolute;right:4px;bottom:2px;color:white;font-size:10px;">x${recipe.output.amount}</span>`;
+    craftResultEl.onclick = () => {
+        // 消耗 crafting 格
+        for (let i = 0; i < craftSlots.length; i++) craftSlots[i] = null;
+        inventory.add(recipe.output.itemId, recipe.output.amount, false);
+        setCraftMessage(`合成成功：${itemDefs[recipe.output.itemId]?.nameZh || recipe.output.itemId}`);
+        renderInventory(); renderHotbar(); renderCrafting();
+    };
+}
+
+
+function renderQuickCraft() {
+    quickCraftList.innerHTML = '';
+    craftingManager.recipes.forEach((recipe) => {
+        const row = document.createElement('div');
+        row.className = 'quick-craft-item';
+        const icon = document.createElement('div');
+        icon.className = 'mc-item-icon';
+        icon.style.position = 'static';
+        icon.style.width = '18px';
+        icon.style.height = '18px';
+        icon.style.backgroundImage = `url(${itemIconDataUrl[recipe.output.itemId] || ''})`;
+        const name = document.createElement('span');
+        name.textContent = `${itemDefs[recipe.output.itemId]?.nameZh || recipe.output.itemId} x${recipe.output.amount}`;
+        name.style.flex = '1';
+        name.style.marginLeft = '6px';
+        name.style.fontSize = '12px';
+
+        const btn = document.createElement('button');
+        btn.textContent = '合成';
+        const needsTable = isRecipeLargerThan2x2(recipe);
+        btn.disabled = !craftingManager.canCraft(recipe) || (needsTable && craftingMode !== 'table');
+        btn.onclick = () => {
+            if (isRecipeLargerThan2x2(recipe) && craftingMode !== 'table') {
+                setCraftMessage('此配方需要在合成台（3x3）製作');
+                return;
+            }
+            const result = craftingManager.craft(recipe);
+            setCraftMessage(result.message);
+            renderInventory(); renderHotbar(); renderCrafting(); renderQuickCraft(); renderQuickCraft();
+        };
+
+        const left = document.createElement('div');
+        left.style.display = 'flex';
+        left.style.alignItems = 'center';
+        left.appendChild(icon);
+        left.appendChild(name);
+
+        row.appendChild(left);
+        row.appendChild(btn);
+        quickCraftList.appendChild(row);
+    });
+    renderHeldItemInHand();
+}
+
+function toggleInventory(mode = 'inventory') {
+    if (!inventoryOpen) setCraftMode(mode);
+    inventoryOpen = !inventoryOpen;
+
+    if (inventoryOpen) {
+        openedInventoryFromLock = controls.isLocked;
+        if (controls.isLocked) {
+            unlockingForInventory = true;
+            controls.unlock(); // 開背包時解鎖游標
+        }
+        inventoryPanel.classList.add('open');
+        fpHandEl.style.display = 'none';
+        renderInventory();
+        renderCrafting();
+        renderFurnace();
+        renderHotbar();
+        renderEquipment();
+        renderQuickCraft();
+        setCraftMessage('');
+    } else {
+        inventoryPanel.classList.remove('open');
+        fpHandEl.style.display = controls.isLocked ? 'block' : 'none';
+        if (openedInventoryFromLock) {
+            controls.lock(); // 關背包時回到遊戲鎖定
+        }
+        openedInventoryFromLock = false;
+    }
+}
 
 // --- A. 基礎場景設定 ---
 const scene = new THREE.Scene();
@@ -23,20 +549,93 @@ const CHUNK_SIZE = 16;
 const RENDER_DISTANCE = 2;
 const loadedChunks = new Map();
 const blocks = []; 
+const blockByPos = new Map();
+const columnIndex = new Map();
 const removedBlocks = new Set(); // 儲存被挖掉的座標 "x,y,z"
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+const worldWorker = new Worker('./worldWorker.js', { type: 'module' });
+const pendingChunks = new Set();
+const chunkBuildQueue = [];
+const animalSystem = createAnimalSystem({
+    scene,
+    camera,
+    getNearbyBlocks,
+    getSurfaceHeightApprox
+});
 
-// 核心：多層次隨機地形 (FBM 模擬)
-function getNoiseHeight(x, z) {
+const dropSystem = createDropSystem({
+    scene,
+    camera,
+    inventory,
+    getNearbyBlocks,
+    getMaterials,
+    onInventoryUpdated: () => {
+        renderHotbar();
+        renderHeldItemInHand();
+        if (inventoryOpen) { renderInventory(); renderCrafting(); }
+    },
+    getPlayerFeetY: () => camera.position.y - currentHeight
+});
+
+function posKey(x, y, z) { return `${x},${y},${z}`; }
+function colKey(x, z) { return `${x},${z}`; }
+
+function addBlockMesh(mesh) {
+    const x = Math.round(mesh.position.x);
+    const y = Math.round(mesh.position.y);
+    const z = Math.round(mesh.position.z);
+    const pKey = posKey(x, y, z);
+    if (blockByPos.has(pKey)) return false;
+
+    scene.add(mesh);
+    blocks.push(mesh);
+    blockByPos.set(pKey, mesh);
+
+    const cKey = colKey(x, z);
+    if (!columnIndex.has(cKey)) columnIndex.set(cKey, new Set());
+    columnIndex.get(cKey).add(mesh);
+    return true;
+}
+
+function removeBlockMesh(mesh) {
+    const x = Math.round(mesh.position.x);
+    const y = Math.round(mesh.position.y);
+    const z = Math.round(mesh.position.z);
+    const pKey = posKey(x, y, z);
+
+    scene.remove(mesh);
+    const idx = blocks.indexOf(mesh);
+    if (idx > -1) blocks.splice(idx, 1);
+    blockByPos.delete(pKey);
+
+    const cKey = colKey(x, z);
+    const col = columnIndex.get(cKey);
+    if (col) {
+        col.delete(mesh);
+        if (col.size === 0) columnIndex.delete(cKey);
+    }
+}
+
+function getNearbyBlocks(x, z, radius = 2) {
+    const cx = Math.round(x);
+    const cz = Math.round(z);
+    const nearby = [];
+    for (let dx = -radius; dx <= radius; dx++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+            const col = columnIndex.get(colKey(cx + dx, cz + dz));
+            if (!col) continue;
+            nearby.push(...col);
+        }
+    }
+    return nearby;
+}
+
+
+function getSurfaceHeightApprox(x, z) {
     let mountain = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 5;
     let hills = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 2;
     let detail = Math.sin(x * 0.4) * Math.cos(z * 0.4) * 0.5;
     return Math.round(mountain + hills + detail);
-}
-
-// 生態系雜訊：判定沙漠
-function getBiomeNoise(x, z) {
-    return Math.sin(x * 0.015) + Math.cos(z * 0.015);
 }
 
 // 核心：補洞邏輯
@@ -49,77 +648,58 @@ function updateNeighbors(x, y, z) {
 
     directions.forEach(([dx, dy, dz]) => {
         const nx = x + dx, ny = y + dy, nz = z + dz;
-        const posKey = `${nx},${ny},${nz}`;
+        const neighborKey = `${nx},${ny},${nz}`;
 
-        if (removedBlocks.has(posKey)) return; // 挖掉的地方不補
-        if (ny > getNoiseHeight(nx, nz) || ny < -20) return; // 限制高度與地底深度
+        if (removedBlocks.has(neighborKey)) return; // 挖掉的地方不補
+        if (ny > getSurfaceHeightApprox(nx, nz) || ny < -20) return; // 限制高度與地底深度
 
-        const exists = blocks.some(b => 
-            Math.abs(b.position.x - nx) < 0.1 && 
-            Math.abs(b.position.y - ny) < 0.1 && 
-            Math.abs(b.position.z - nz) < 0.1
-        );
+        const exists = blockByPos.has(posKey(nx, ny, nz));
 
         if (!exists) {
             const m = new THREE.Mesh(boxGeo, getMaterials('stone'));
+            m.userData.blockType = 'stone';
             m.position.set(nx, ny, nz);
-            scene.add(m);
-            blocks.push(m);
+            addBlockMesh(m);
         }
     });
+    renderHeldItemInHand();
 }
 
-// 生成區塊
+// 生成區塊（改為由 Worker 負責地圖資料計算）
 function spawnChunk(cx, cz) {
     const key = `${cx},${cz}`;
-    if (loadedChunks.has(key)) return;
-    const chunkBlocks = [];
+    if (loadedChunks.has(key) || pendingChunks.has(key)) return;
+    pendingChunks.add(key);
+    worldWorker.postMessage({
+        type: 'generate_chunk',
+        cx,
+        cz,
+        removedBlocks: Array.from(removedBlocks)
+    });
+    renderHeldItemInHand();
+}
 
-    for (let x = 0; x < CHUNK_SIZE; x++) {
-        for (let z = 0; z < CHUNK_SIZE; z++) {
-            const wx = cx * CHUNK_SIZE + x;
-            const wz = cz * CHUNK_SIZE + z;
-            const h = getNoiseHeight(wx, wz);
-            const biomeVal = getBiomeNoise(wx, wz);
-            const isDesert = biomeVal > 0.6;
+worldWorker.onmessage = (event) => {
+    const { type, key, blocks: blockData } = event.data;
+    if (type !== 'chunk_generated') return;
+    pendingChunks.delete(key);
+    chunkBuildQueue.push({ key, blockData });
+};
 
-            if (!removedBlocks.has(`${wx},${h},${wz}`)) {
-                const type = isDesert ? 'sand' : 'grass';
-                const m = new THREE.Mesh(boxGeo, getMaterials(type));
-                m.position.set(wx, h, wz);
-                scene.add(m);
-                blocks.push(m);
-                chunkBlocks.push(m);
-
-                // 樹木生成 (僅限非沙漠且隨機機率)
-                if (!isDesert && h >= 0 && Math.random() < 0.015) {
-                    const treeH = 3 + Math.floor(Math.random() * 2);
-                    // 樹幹
-                    for (let ty = 1; ty <= treeH; ty++) {
-                        const wood = new THREE.Mesh(boxGeo, getMaterials('wood'));
-                        wood.position.set(wx, h + ty, wz);
-                        scene.add(wood);
-                        blocks.push(wood);
-                        chunkBlocks.push(wood);
-                    }
-                    // 樹葉
-                    for (let lx = -1; lx <= 1; lx++) {
-                        for (let lz = -1; lz <= 1; lz++) {
-                            for (let ly = 0; ly < 2; ly++) {
-                                if (Math.abs(lx) + Math.abs(lz) === 2 && Math.random() > 0.5) continue;
-                                const leaf = new THREE.Mesh(boxGeo, getMaterials('leaf'));
-                                leaf.position.set(wx + lx, h + treeH + ly + 1, wz + lz);
-                                scene.add(leaf);
-                                blocks.push(leaf);
-                                chunkBlocks.push(leaf);
-                            }
-                        }
-                    }
-                }
-            }
+function flushChunkBuildQueue(maxChunksPerFrame = 1) {
+    for (let i = 0; i < maxChunksPerFrame && chunkBuildQueue.length > 0; i++) {
+        const { key, blockData } = chunkBuildQueue.shift();
+        if (loadedChunks.has(key)) continue;
+        const chunkBlocks = [];
+        for (const data of blockData) {
+            const m = new THREE.Mesh(boxGeo, getMaterials(data.type));
+            m.userData.blockType = data.type;
+            m.position.set(data.x, data.y, data.z);
+            addBlockMesh(m);
+            chunkBlocks.push(m);
         }
+        loadedChunks.set(key, chunkBlocks);
     }
-    loadedChunks.set(key, chunkBlocks);
 }
 
 const generationQueue = [];
@@ -136,9 +716,7 @@ function updateWorld() {
         const [cx, cz] = key.split(',').map(Number);
         if (Math.abs(cx - px) > RENDER_DISTANCE + 1 || Math.abs(cz - pz) > RENDER_DISTANCE + 1) {
             chunkBlocks.forEach(b => {
-                scene.remove(b);
-                const idx = blocks.indexOf(b);
-                if (idx > -1) blocks.splice(idx, 1);
+                removeBlockMesh(b);
             });
             loadedChunks.delete(key);
         }
@@ -154,69 +732,128 @@ function processQueue() {
 
 // --- C. 物品欄 UI (含圖示) ---
 const hotbar = document.createElement('div');
-hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:10px; background:rgba(0,0,0,0.7); padding:10px; border:4px solid #333; display:none; border-radius:8px;`;
+hotbar.style.cssText = `position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; flex-wrap:nowrap; width:max-content; gap:6px; background:rgba(0,0,0,0.7); padding:10px; border:4px solid #333; display:none; border-radius:8px;`;
 document.body.appendChild(hotbar);
 
-const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand'];
+const blockTypes = ['grass', 'stone', 'wood', 'leaf', 'sand', 'sandstone', 'crafting_table', 'coal_ore', 'iron_ore', 'furnace'];
 const slots = [];
 
-blockTypes.forEach((type, i) => {
-    const slot = document.createElement('div');
-    slot.style.cssText = `width:60px; height:60px; border:3px solid #8b8b8b; background:#555; display:flex; flex-direction:column; align-items:center; justify-content:center; transition: transform 0.1s;`;
-    
-    const icon = document.createElement('div');
-    const colors = blockIconColors[type];
-    const canvas = getPixelCanvas(colors[0], colors[1]);
-    icon.style.width = '32px';
-    icon.style.height = '32px';
-    icon.style.backgroundImage = `url(${canvas.toDataURL()})`;
-    icon.style.backgroundSize = 'cover';
-    icon.style.imageRendering = 'pixelated';
-    icon.style.marginBottom = '2px';
+function renderHotbar() {
+    const hotbarSlots = inventory.getSlots(27, 36);
+    slots.forEach((slot, i) => {
+        const icon = slot.querySelector('.hb-icon');
+        const label = slot.querySelector('.hb-count');
+        const entry = hotbarSlots[i];
+        if (!entry) {
+            icon.style.backgroundImage = '';
+            label.textContent = '';
+            return;
+        }
+        icon.style.backgroundImage = `url(${itemIconDataUrl[entry.itemId] || ''})`;
+        label.textContent = `x${entry.count}`;
+    });
+    renderHeldItemInHand();
+}
 
-    const label = document.createElement('span');
-    label.style.cssText = `color:white; font-size:10px; font-family:monospace;`;
-    label.innerText = i + 1;
+for (let i = 0; i < 9; i++) {
+    const slot = document.createElement('div');
+    slot.style.cssText = `width:54px; height:54px; border:3px solid #8b8b8b; background:#555; position:relative;`;
+
+    const icon = document.createElement('div');
+    icon.className = 'hb-icon';
+    icon.style.cssText = 'position:absolute; left:9px; top:8px; width:32px; height:32px; background-size:cover; image-rendering:pixelated;';
+
+    const count = document.createElement('span');
+    count.className = 'hb-count';
+    count.style.cssText = 'position:absolute; right:4px; bottom:2px; color:white; font-size:10px; font-family:monospace;';
 
     slot.appendChild(icon);
-    slot.appendChild(label);
+    slot.appendChild(count);
     hotbar.appendChild(slot);
     slots.push(slot);
-});
+}
+
+function playHandSwing() {
+    if (!controls.isLocked || inventoryOpen) return;
+    fpHandEl.classList.remove('swing');
+    void fpHandEl.offsetWidth;
+    fpHandEl.classList.add('swing');
+}
+
+function renderHeldItemInHand() {
+    const selectedSlot = inventory.getSlots(27, 36)[selectedIdx];
+    if (!selectedSlot) {
+        fpHeldItemEl.style.backgroundImage = '';
+        fpHandEl.classList.remove('has-item');
+        return;
+    }
+    fpHeldItemEl.style.backgroundImage = `url(${itemIconDataUrl[selectedSlot.itemId] || ''})`;
+    fpHandEl.classList.add('has-item');
+}
 
 function updateSelection(idx) {
     slots.forEach((s, i) => {
         if (i === idx) {
             s.style.border = '4px solid white';
             s.style.backgroundColor = '#777';
-            s.style.transform = 'scale(1.1)';
+            s.style.transform = 'scale(1.05)';
         } else {
             s.style.border = '3px solid #8b8b8b';
             s.style.backgroundColor = '#555';
             s.style.transform = 'scale(1)';
         }
     });
+    renderHeldItemInHand();
 }
+renderHotbar();
+renderEquipment();
 updateSelection(0);
+renderHeldItemInHand();
 
 // --- D. 控制與點擊 ---
 document.getElementById('btn-play').addEventListener('click', () => controls.lock());
-controls.addEventListener('lock', () => { overlay.style.display = 'none'; crosshair.style.display = 'block'; hotbar.style.display = 'flex'; });
-controls.addEventListener('unlock', () => { overlay.style.display = 'flex'; crosshair.style.display = 'none'; hotbar.style.display = 'none'; });
+controls.addEventListener('lock', () => {
+    overlay.style.display = 'none';
+    crosshair.style.display = inventoryOpen ? 'none' : 'block';
+    hotbar.style.display = 'flex';
+    fpHandEl.style.display = inventoryOpen ? 'none' : 'block';
+});
+controls.addEventListener('unlock', () => {
+    if (unlockingForInventory) {
+        unlockingForInventory = false;
+        overlay.style.display = 'none';
+        crosshair.style.display = 'none';
+        hotbar.style.display = 'flex';
+        fpHandEl.style.display = 'none';
+        return;
+    }
+    overlay.style.display = 'flex';
+    crosshair.style.display = 'none';
+    hotbar.style.display = 'none';
+    fpHandEl.style.display = 'none';
+});
 
-let selectedIdx = 0;
 const velocity = new THREE.Vector3();
 const playerRadius = 0.35;
-let canJump = false, isCrouching = false, currentHeight = 1.7;
+let canJump = false, isCrouching = false, currentHeight = 1.8;
 const keys = {};
 
 document.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if (e.code.startsWith('Digit')) {
         const val = parseInt(e.code.replace('Digit', '')) - 1;
-        if (val >= 0 && val < 5) { selectedIdx = val; updateSelection(val); }
+        if (val >= 0 && val < 9) { selectedIdx = val; updateSelection(val); }
     }
-    if (e.code === 'Space' && canJump) { velocity.y += 9.5; canJump = false; }
+    if (e.code === 'KeyE') {
+        toggleInventory('inventory');
+        return;
+    }
+    if (e.code === 'Space' && canJump) {
+        const feetY = camera.position.y - currentHeight;
+        const near = getNearbyBlocks(camera.position.x, camera.position.z, 2);
+        const blockedHead = checkCapsuleWall(camera.position.x, feetY + 0.05, camera.position.z, near, playerRadius, currentHeight + 0.2);
+        if (!blockedHead) { velocity.y += 9.5; canJump = false; }
+    }
     if (e.shiftKey) isCrouching = true;
 });
 document.addEventListener('keyup', (e) => { 
@@ -225,34 +862,94 @@ document.addEventListener('keyup', (e) => {
 });
 window.addEventListener('wheel', (e) => {
     if (!controls.isLocked) return;
-    selectedIdx = (selectedIdx + (e.deltaY > 0 ? 1 : -1) + 5) % 5;
+    selectedIdx = (selectedIdx + (e.deltaY > 0 ? 1 : -1) + 9) % 9;
     updateSelection(selectedIdx);
 }, { passive: true });
 
 window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
+    playHandSwing();
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-    const intersects = raycaster.intersectObjects(blocks);
+    const interactableBlocks = getNearbyBlocks(camera.position.x, camera.position.z, 4);
+    const intersects = raycaster.intersectObjects(interactableBlocks);
     if (intersects.length > 0) {
         const intersect = intersects[0];
         const pos = intersect.object.position.clone();
         if (e.button === 0) { // 挖掘
             removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
-            scene.remove(intersect.object);
-            const idx = blocks.indexOf(intersect.object);
-            if (idx > -1) blocks.splice(idx, 1);
+            const blockType = intersect.object.userData.blockType || 'stone';
+            dropSystem.spawnDrop(blockType, pos.x, pos.y, pos.z);
+            removeBlockMesh(intersect.object);
             updateNeighbors(pos.x, pos.y, pos.z);
-        } else if (e.button === 2) { // 建造
-            const b = new THREE.Mesh(boxGeo, getMaterials(blockTypes[selectedIdx]));
+        } else if (e.button === 2) { // 建造/使用
+            if (intersect.object.userData.blockType === 'crafting_table') {
+                toggleInventory('table');
+                return;
+            }
+            if (intersect.object.userData.blockType === 'furnace') {
+                activeFurnaceKey = `${intersect.object.position.x},${intersect.object.position.y},${intersect.object.position.z}`;
+                toggleInventory('furnace');
+                return;
+            }
+            const selectedSlot = inventory.getSlots(27, 36)[selectedIdx];
+            if (!selectedSlot || !blockTypes.includes(selectedSlot.itemId)) return;
+            const b = new THREE.Mesh(boxGeo, getMaterials(selectedSlot.itemId));
+            b.userData.blockType = selectedSlot.itemId;
+            inventory.remove(selectedSlot.itemId, 1);
+            renderInventory();
+            renderHotbar();
+            renderEquipment();
+            renderQuickCraft();
             const placePos = pos.add(intersect.face.normal);
             b.position.copy(placePos);
             removedBlocks.delete(`${placePos.x},${placePos.y},${placePos.z}`);
-            scene.add(b); blocks.push(b);
+            addBlockMesh(b);
         }
     }
 });
 window.addEventListener('contextmenu', e => e.preventDefault());
+
+
+bindFurnaceSlot(furnaceInputEl, 'input');
+bindFurnaceSlot(furnaceFuelEl, 'fuel');
+
+furnaceOutputEl.addEventListener('click', () => {
+    if (!activeFurnaceKey || !inventoryOpen || craftingMode !== 'furnace') return;
+    const f = getFurnaceState(activeFurnaceKey);
+    if (!f.output) return;
+    inventory.add(f.output.itemId, 1, true);
+    f.output.count -= 1;
+    if (f.output.count <= 0) f.output = null;
+    renderInventory(); renderHotbar(); renderFurnace();
+});
+
+
+function tickFurnaces(dt) {
+    for (const f of furnaceStates.values()) {
+        if (f.burnTime > 0) f.burnTime -= dt;
+        const resultId = f.input ? smeltResult(f.input.itemId) : null;
+        if (f.input && resultId && (!f.output || f.output.itemId === resultId)) {
+            if (f.burnTime <= 0 && f.fuel && fuelTime(f.fuel.itemId) > 0) {
+                f.fuel.count -= 1;
+                f.burnTime += fuelTime(f.fuel.itemId);
+                if (f.fuel.count <= 0) f.fuel = null;
+            }
+            if (f.burnTime > 0) {
+                f.progress += dt;
+                if (f.progress >= 3.5) {
+                    f.progress = 0;
+                    f.input.count -= 1;
+                    if (f.input.count <= 0) f.input = null;
+                    if (!f.output) f.output = { itemId: resultId, count: 0 };
+                    f.output.count += 1;
+                }
+            }
+        } else {
+            f.progress = 0;
+        }
+    }
+}
 
 // --- E. 燈光與遊戲循環 ---
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -264,20 +961,28 @@ camera.position.set(0, 30, 0);
 let prevT = performance.now();
 function animate() {
     requestAnimationFrame(animate);
+    const t = performance.now();
+    const dt = Math.min((t - prevT) / 1000, 0.05);
+    prevT = t;
+    tickFurnaces(dt);
+    if (inventoryOpen && craftingMode === "furnace") renderFurnace();
+
     if (controls.isLocked) {
         updateWorld();
         processQueue();
-        const t = performance.now();
-        const dt = Math.min((t - prevT) / 1000, 0.05);
-        prevT = t;
+        flushChunkBuildQueue();
+        dropSystem.updateDrops(dt);
+        animalSystem.spawnAnimalsNearPlayer();
+        animalSystem.updateAnimals(dt);
 
-        const targetH = isCrouching ? 1.2 : 1.7;
+        const targetH = isCrouching ? 1.2 : 1.8;
         currentHeight += (targetH - currentHeight) * 0.2;
         velocity.x -= velocity.x * 10 * dt;
         velocity.z -= velocity.z * 10 * dt;
         
         const feetY = camera.position.y - currentHeight;
-        const groundH = getGroundAt(camera.position.x, camera.position.z, blocks, playerRadius, feetY);
+        const nearbyGroundBlocks = getNearbyBlocks(camera.position.x, camera.position.z);
+        const groundH = getGroundAt(camera.position.x, camera.position.z, nearbyGroundBlocks, playerRadius, feetY);
 
         if (groundH === -999) { velocity.y = 0; }
         else { velocity.y -= 28 * dt; }
@@ -299,14 +1004,20 @@ function animate() {
         }
 
         const nextX = camera.position.x + velocity.x * dt;
-        if (!checkWall(nextX, camera.position.y, camera.position.z, blocks, playerRadius)) {
-            if (getGroundAt(nextX, camera.position.z, blocks, playerRadius, feetY) !== -999) camera.position.x = nextX;
+        if (!checkCapsuleWall(nextX, feetY + 0.05, camera.position.z, nearbyGroundBlocks, playerRadius, currentHeight - 0.1)) {
+            if (getGroundAt(nextX, camera.position.z, nearbyGroundBlocks, playerRadius, feetY) !== -999) camera.position.x = nextX;
         }
         const nextZ = camera.position.z + velocity.z * dt;
-        if (!checkWall(camera.position.x, camera.position.y, nextZ, blocks, playerRadius)) {
-            if (getGroundAt(camera.position.x, nextZ, blocks, playerRadius, feetY) !== -999) camera.position.z = nextZ;
+        if (!checkCapsuleWall(camera.position.x, feetY + 0.05, nextZ, nearbyGroundBlocks, playerRadius, currentHeight - 0.1)) {
+            if (getGroundAt(camera.position.x, nextZ, nearbyGroundBlocks, playerRadius, feetY) !== -999) camera.position.z = nextZ;
         }
         camera.position.y += velocity.y * dt;
+        const newFeetY = camera.position.y - currentHeight;
+        const hitCeiling = checkCapsuleWall(camera.position.x, newFeetY + 0.05, camera.position.z, nearbyGroundBlocks, playerRadius, currentHeight - 0.1);
+        if (velocity.y > 0 && hitCeiling) {
+            velocity.y = 0;
+            camera.position.y = Math.floor(camera.position.y) - 0.01;
+        }
         if (groundH !== -999 && camera.position.y - currentHeight <= groundH) {
             velocity.y = 0; camera.position.y = groundH + currentHeight; canJump = true;
         } else if (groundH !== -999) { canJump = false; }

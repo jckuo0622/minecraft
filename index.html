@@ -9,13 +9,80 @@
 <body>
     <div id="game-container"></div>
     <div id="crosshair">+</div>
-    
+    <div id="first-person-hand" aria-hidden="true">
+        <div class="fp-arm"></div>
+        <div class="fp-held-item" id="fp-held-item"></div>
+    </div>
+
     <div id="overlay">
         <div id="menu">
-            <h1>我的世界網頁版</h1>
-            <button id="btn-play">開始遊戲</button>
-            <p>控制：W A S D 移動 | Space 跳躍 | Shift 潛行<br>
-               1~3 切換方塊 | 左鍵挖掘 | 右鍵建造</p>
+            <div class="menu-logo">
+                <h1>MINECRAFT</h1>
+                <p class="menu-subtitle">我的世界網頁版 · Three.js Edition</p>
+            </div>
+            <div class="menu-splash">超讚像素生存！</div>
+            <div class="menu-actions">
+                <button id="btn-play">開始遊戲</button>
+            </div>
+            <p class="menu-controls">控制：W A S D 移動 | Space 跳躍 | Shift 潛行<br>
+               1~9 切換物品 | E 背包 | 左鍵挖掘 | 右鍵建造 / 使用</p>
+            <div class="menu-footer">Tip：開局先挖木頭，做出合成台與石斧！</div>
+        </div>
+    </div>
+
+    <div id="inventory-panel" class="mc-inventory">
+        <div class="mc-panel-wrap">
+            <div class="mc-panel">
+                <div class="mc-top-row">
+                    <div class="mc-avatar-wrap">
+                        <div class="mc-avatar" id="player-avatar">
+                            <div class="avatar-model" id="avatar-model">
+                                <div class="avatar-head">
+                                    <img class="avatar-face-front" src="./player-face.png" alt="player face" />
+                                </div>
+                                <div class="avatar-body"></div>
+                                <div class="avatar-arm left"></div>
+                                <div class="avatar-arm right"></div>
+                                <div class="avatar-leg left"></div>
+                                <div class="avatar-leg right"></div>
+                            </div>
+                        </div>
+                        <div class="mc-equip-column" id="equip-column">
+                            <div class="slot equip-slot" data-equip="helmet" title="頭盔"></div>
+                            <div class="slot equip-slot" data-equip="chest" title="護甲"></div>
+                            <div class="slot equip-slot" data-equip="legs" title="護腿"></div>
+                            <div class="slot equip-slot" data-equip="boots" title="鞋子"></div>
+                        </div>
+                    </div>
+                    <div class="mc-crafting-area" id="crafting-area">
+                        <div class="mc-title" id="crafting-title">2x2</div>
+                        <div class="mc-craft-grid" id="craft-grid"></div>
+                        <div class="mc-craft-result" id="craft-result"></div>
+                    </div>
+                    <div class="mc-furnace-area" id="furnace-area">
+                        <div class="mc-title">熔爐</div>
+                        <div class="furnace-slots">
+                            <div class="furnace-left">
+                                <div class="slot furnace-slot" id="furnace-input"></div>
+                                <div class="slot furnace-slot" id="furnace-fuel"></div>
+                            </div>
+                            <div class="mc-furnace-progress"><div id="furnace-progress-fill"></div></div>
+                            <div class="slot furnace-slot" id="furnace-output"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mc-title" style="margin-top:8px;">背包（E 開關）</div>
+                <div id="inventory-list" class="mc-inventory-grid"></div>
+                <div class="mc-title" style="margin-top:6px;">物品欄</div>
+                <div id="inventory-hotbar-grid" class="mc-hotbar-grid"></div>
+                <div id="crafting-message" class="mc-message"></div>
+            </div>
+
+            <div class="mc-recipe-book">
+                <div class="mc-title">合成表</div>
+                <div id="quick-craft-list" class="quick-craft-list"></div>
+            </div>
         </div>
     </div>
 
