@@ -975,6 +975,7 @@ camera.position.set(0, 30, 0);
 const playerAnchor = new THREE.Vector3(0, 30, 0);
 const thirdPersonDistance = 4.2;
 const thirdPersonFrontDistance = 3.2;
+const playerFacingDir = new THREE.Vector3(0, 0, 1);
 
 function createPlayerModel() {
     const g = new THREE.Group();
@@ -1049,7 +1050,9 @@ function animate() {
 
         const forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
-        forward.y = 0; forward.normalize();
+        forward.y = 0;
+        if (forward.lengthSq() < 0.0001) forward.set(playerFacingDir.x, 0, playerFacingDir.z);
+        forward.normalize();
         const right = new THREE.Vector3().crossVectors(camera.up, forward).normalize();
         const moveDir = new THREE.Vector3(0, 0, 0);
         if (keys['KeyW']) moveDir.add(forward);
@@ -1061,6 +1064,7 @@ function animate() {
             moveDir.normalize();
             velocity.x += moveDir.x * (isCrouching ? 25 : 65) * dt;
             velocity.z += moveDir.z * (isCrouching ? 25 : 65) * dt;
+            playerFacingDir.copy(moveDir).normalize();
         }
 
         const nextX = camera.position.x + velocity.x * dt;
@@ -1084,12 +1088,8 @@ function animate() {
         if (camera.position.y < -30) camera.position.set(0, 30, 0);
 
         playerAnchor.set(camera.position.x, camera.position.y - currentHeight, camera.position.z);
-        const viewDir = new THREE.Vector3();
-        camera.getWorldDirection(viewDir);
-        viewDir.y = 0;
-        if (viewDir.lengthSq() > 0.0001) {
-            playerModel.rotation.y = Math.atan2(viewDir.x, viewDir.z) + Math.PI;
-        }
+        const viewDir = playerFacingDir.clone();
+        playerModel.rotation.y = Math.atan2(viewDir.x, viewDir.z) + Math.PI;
         playerModel.position.copy(playerAnchor);
 
         const pdata = playerModel.userData;
