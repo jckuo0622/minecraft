@@ -80,6 +80,7 @@ let craftSlots = Array.from({ length: 4 }, () => null);
 let activeFurnaceKey = null;
 const furnaceStates = new Map();
 const equipment = { helmet: null, chest: null, legs: null, boots: null };
+let selectedIdx = 0;
 
 
 function setCraftMode(mode) {
@@ -825,7 +826,6 @@ controls.addEventListener('unlock', () => {
     fpHandEl.style.display = 'none';
 });
 
-let selectedIdx = 0;
 const velocity = new THREE.Vector3();
 const playerRadius = 0.35;
 let canJump = false, isCrouching = false, currentHeight = 1.8;
