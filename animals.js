@@ -70,7 +70,7 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
     const spawnedAnimalCells = new Set();
 
     function animalCellKey(x, z) {
-        return `${Math.floor(x / 10)},${Math.floor(z / 10)}`;
+        return `${Math.floor(x / 7)},${Math.floor(z / 7)}`;
     }
 
     function trySpawnAt(rx, rz) {
@@ -119,12 +119,12 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
     }
 
     function spawnAnimalsNearPlayer(maxAnimals = 18) {
-        const dynamicMaxAnimals = Math.max(maxAnimals, 28);
+        const dynamicMaxAnimals = Math.max(maxAnimals, 120);
         if (animals.length >= dynamicMaxAnimals) return;
         const px = Math.floor(camera.position.x);
         const pz = Math.floor(camera.position.z);
 
-        for (let i = 0; i < 4 && animals.length < dynamicMaxAnimals; i++) {
+        for (let i = 0; i < 14 && animals.length < dynamicMaxAnimals; i++) {
             const angle = Math.random() * Math.PI * 2;
             const distance = 10 + Math.random() * 24;
             const rx = Math.floor(px + Math.cos(angle) * distance);
@@ -140,14 +140,14 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
         if (camForward.lengthSq() < 0.0001) return;
         camForward.normalize();
 
-        const minVisibleAnimals = 5;
+        const minVisibleAnimals = 24;
         let visibleCount = countAnimalsInView();
         const remainingSlots = dynamicMaxAnimals - animals.length;
-        const maxViewSpawnAttempts = Math.min(40, Math.max(10, remainingSlots * 6));
+        const maxViewSpawnAttempts = Math.min(180, Math.max(40, remainingSlots * 10));
 
         for (let i = 0; i < maxViewSpawnAttempts && animals.length < dynamicMaxAnimals && visibleCount < minVisibleAnimals; i++) {
-            const distance = 8 + Math.random() * 20;
-            const sideOffset = (Math.random() - 0.5) * 14;
+            const distance = 6 + Math.random() * 30;
+            const sideOffset = (Math.random() - 0.5) * 24;
             const rx = Math.floor(px + camForward.x * distance - camForward.z * sideOffset);
             const rz = Math.floor(pz + camForward.z * distance + camForward.x * sideOffset);
             if (trySpawnAt(rx, rz)) {
