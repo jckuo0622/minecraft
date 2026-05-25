@@ -81,6 +81,7 @@ let activeFurnaceKey = null;
 const furnaceStates = new Map();
 const equipment = { helmet: null, chest: null, legs: null, boots: null };
 let selectedIdx = 0;
+let isThirdPerson = false;
 
 
 function setCraftMode(mode) {
@@ -816,7 +817,8 @@ controls.addEventListener('lock', () => {
     overlay.style.display = 'none';
     crosshair.style.display = inventoryOpen ? 'none' : 'block';
     hotbar.style.display = 'flex';
-    fpHandEl.style.display = inventoryOpen ? 'none' : 'block';
+    fpHandEl.style.display = (inventoryOpen || isThirdPerson) ? 'none' : 'block';
+    playerModel.visible = isThirdPerson;
 });
 controls.addEventListener('unlock', () => {
     if (unlockingForInventory) {
@@ -831,6 +833,7 @@ controls.addEventListener('unlock', () => {
     crosshair.style.display = 'none';
     hotbar.style.display = 'none';
     fpHandEl.style.display = 'none';
+    playerModel.visible = false;
 });
 
 const velocity = new THREE.Vector3();
@@ -846,6 +849,12 @@ document.addEventListener('keydown', (e) => {
     }
     if (e.code === 'KeyE') {
         toggleInventory('inventory');
+        return;
+    }
+    if (e.code === 'KeyQ') {
+        isThirdPerson = !isThirdPerson;
+        playerModel.visible = isThirdPerson && controls.isLocked;
+        fpHandEl.style.display = (!isThirdPerson && controls.isLocked && !inventoryOpen) ? 'block' : 'none';
         return;
     }
     if (e.code === 'Space' && canJump) {
@@ -958,6 +967,34 @@ sun.position.set(10, 20, 10);
 scene.add(sun);
 camera.position.set(0, 30, 0);
 
+const playerAnchor = new THREE.Vector3(0, 30, 0);
+const thirdPersonDistance = 4.2;
+
+function createPlayerModel() {
+    const g = new THREE.Group();
+    const skin = new THREE.MeshLambertMaterial({ color: 0xe0b18d });
+    const shirt = new THREE.MeshLambertMaterial({ color: 0x3f86ff });
+    const pants = new THREE.MeshLambertMaterial({ color: 0x2f3d67 });
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.56, 0.56), skin);
+    head.position.y = 1.55;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.72, 0.3), shirt);
+    body.position.y = 1.02;
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), skin);
+    armL.position.set(-0.4, 1.03, 0);
+    const armR = armL.clone();
+    armR.position.x = 0.4;
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.72, 0.24), pants);
+    legL.position.set(-0.16, 0.32, 0);
+    const legR = legL.clone();
+    legR.position.x = 0.16;
+    g.add(head, body, armL, armR, legL, legR);
+    g.visible = false;
+    return g;
+}
+
+const playerModel = createPlayerModel();
+scene.add(playerModel);
+
 let prevT = performance.now();
 function animate() {
     requestAnimationFrame(animate);
@@ -968,6 +1005,7 @@ function animate() {
     if (inventoryOpen && craftingMode === "furnace") renderFurnace();
 
     if (controls.isLocked) {
+        if (isThirdPerson) camera.position.copy(playerAnchor);
         updateWorld();
         processQueue();
         flushChunkBuildQueue();
@@ -1022,6 +1060,26 @@ function animate() {
             velocity.y = 0; camera.position.y = groundH + currentHeight; canJump = true;
         } else if (groundH !== -999) { canJump = false; }
         if (camera.position.y < -30) camera.position.set(0, 30, 0);
+
+        playerAnchor.copy(camera.position);
+        const viewDir = new THREE.Vector3();
+        camera.getWorldDirection(viewDir);
+        viewDir.y = 0;
+        if (viewDir.lengthSq() > 0.0001) {
+            playerModel.rotation.y = Math.atan2(viewDir.x, viewDir.z);
+        }
+        playerModel.position.copy(playerAnchor);
+
+        if (isThirdPerson) {
+            const back = viewDir.lengthSq() > 0.0001 ? viewDir.clone().normalize() : new THREE.Vector3(0, 0, 1);
+            camera.position.set(
+                playerAnchor.x - back.x * thirdPersonDistance,
+                playerAnchor.y + 1.7,
+                playerAnchor.z - back.z * thirdPersonDistance
+            );
+            camera.lookAt(playerAnchor.x, playerAnchor.y + 1.35, playerAnchor.z);
+            fpHandEl.style.display = 'none';
+        }
     }
     renderer.render(scene, camera);
 }
