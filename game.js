@@ -852,6 +852,7 @@ document.addEventListener('keydown', (e) => {
         return;
     }
     if (e.code === 'KeyQ') {
+        if (e.repeat) return;
         isThirdPerson = !isThirdPerson;
         playerModel.visible = isThirdPerson && controls.isLocked;
         fpHandEl.style.display = (!isThirdPerson && controls.isLocked && !inventoryOpen) ? 'block' : 'none';
@@ -974,9 +975,14 @@ const thirdPersonFrontDistance = 3.2;
 function createPlayerModel() {
     const g = new THREE.Group();
     const skin = new THREE.MeshLambertMaterial({ color: 0xe0b18d });
-    const shirt = new THREE.MeshLambertMaterial({ color: 0x3f86ff });
-    const pants = new THREE.MeshLambertMaterial({ color: 0x2f3d67 });
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.56, 0.56), skin);
+    const shirt = new THREE.MeshLambertMaterial({ color: 0x39a0ff });
+    const pants = new THREE.MeshLambertMaterial({ color: 0x3f4a5d });
+    const faceTex = new THREE.TextureLoader().load('./player-face.png');
+    faceTex.magFilter = THREE.NearestFilter;
+    faceTex.minFilter = THREE.NearestFilter;
+    const faceMat = new THREE.MeshLambertMaterial({ map: faceTex });
+    const headMats = [skin, skin, skin, skin, faceMat, skin];
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.56, 0.56), headMats);
     head.position.y = 1.55;
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.72, 0.3), shirt);
     body.position.y = 1.02;
