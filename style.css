@@ -122,7 +122,7 @@ body { margin: 0; overflow: hidden; background-color: #000; }
 .mc-inventory {position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25);z-index:20;font-family:monospace;}
 .mc-panel {width:520px;background:#c6c6c6;border:3px solid #222;box-shadow:inset 2px 2px #fff,inset -2px -2px #555;padding:12px;}
 .mc-top-row{display:flex;gap:14px;margin-bottom:10px;}
-.mc-avatar{width:130px;height:150px;background:#111;color:#7fd9ff;display:flex;align-items:center;justify-content:center;border:2px solid #3a3a3a;}
+.mc-avatar{width:130px;height:150px;background:linear-gradient(#141414,#1f1f1f);display:flex;align-items:flex-end;justify-content:center;border:2px solid #3a3a3a;position:relative;overflow:hidden;}
 .mc-crafting-area{flex:1;}
 .mc-title{font-weight:700;color:#222;margin-bottom:6px;}
 .mc-craft-grid{display:grid;grid-template-columns:repeat(2,42px);gap:6px;}
@@ -172,3 +172,37 @@ body { margin: 0; overflow: hidden; background-color: #000; }
 .equip-slot[data-equip="chest"]::after{content:"甲";}
 .equip-slot[data-equip="legs"]::after{content:"腿";}
 .equip-slot[data-equip="boots"]::after{content:"靴";}
+
+
+#first-person-hand{position:absolute;right:4vw;bottom:5vh;width:220px;height:220px;pointer-events:none;z-index:6;display:none;}
+.fp-arm{position:absolute;right:20px;bottom:8px;width:120px;height:48px;background:linear-gradient(#e8bc98,#ce9371);border:3px solid #5c4333;transform:rotate(-24deg);transform-origin:right bottom;border-radius:10px;transition:transform .12s ease,right .12s ease,bottom .12s ease;}
+#first-person-hand.has-item .fp-arm{right:8px;bottom:-2px;transform:rotate(-34deg);}
+.fp-held-item{position:absolute;right:88px;bottom:74px;width:62px;height:62px;background-size:cover;background-position:center;image-rendering:pixelated;transform:rotate(-32deg);filter:drop-shadow(0 3px 2px rgba(0,0,0,.55));display:none;}
+#first-person-hand.has-item .fp-held-item{display:block;}
+
+.avatar-model{position:relative;width:88px;height:138px;margin-bottom:4px;}
+.avatar-head,.avatar-body,.avatar-arm,.avatar-leg{position:absolute;image-rendering:pixelated;border:1px solid #111;}
+.avatar-head{left:30px;top:2px;width:28px;height:28px;background:linear-gradient(#f1c4a2,#d79b78);overflow:hidden;position:absolute;}
+.avatar-face-front{width:100%;height:100%;object-fit:cover;display:block;image-rendering:auto;}
+.avatar-body{left:30px;top:32px;width:28px;height:42px;background:#39a0ff;}
+.avatar-arm{top:32px;width:12px;height:42px;background:#f1c4a2;}
+.avatar-arm.left{left:16px;}
+.avatar-arm.right{left:60px;}
+.avatar-leg{top:76px;width:12px;height:48px;background:#3f4a5d;}
+.avatar-leg.left{left:30px;}
+.avatar-leg.right{left:46px;}
+
+
+#first-person-hand.swing .fp-arm{animation:fp-swing-arm .16s ease-out;}
+#first-person-hand.swing.has-item .fp-held-item{animation:fp-swing-item .16s ease-out;}
+
+@keyframes fp-swing-arm{
+  0%{transform:rotate(-24deg) translate(0,0);} 
+  40%{transform:rotate(-52deg) translate(-8px,8px);} 
+  100%{transform:rotate(-24deg) translate(0,0);} 
+}
+@keyframes fp-swing-item{
+  0%{transform:rotate(-32deg) translate(0,0);} 
+  40%{transform:rotate(-58deg) translate(-10px,10px);} 
+  100%{transform:rotate(-32deg) translate(0,0);} 
+}
