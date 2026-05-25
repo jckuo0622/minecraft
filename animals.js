@@ -93,14 +93,15 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
         return true;
     }
 
-    function hasAnimalInView(maxDistance = 42) {
+    function countAnimalsInView(maxDistance = 42) {
         const camForward = new THREE.Vector3();
         camera.getWorldDirection(camForward);
         camForward.y = 0;
-        if (camForward.lengthSq() < 0.0001) return false;
+        if (camForward.lengthSq() < 0.0001) return 0;
         camForward.normalize();
         const cosHalfFov = Math.cos(Math.PI / 6);
         const maxDistSq = maxDistance * maxDistance;
+        let visibleCount = 0;
 
         for (const mob of animals) {
             const toMob = new THREE.Vector3(
@@ -111,9 +112,9 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
             const distSq = toMob.lengthSq();
             if (distSq > maxDistSq || distSq < 4) continue;
             toMob.normalize();
-            if (toMob.dot(camForward) >= cosHalfFov) return true;
+            if (toMob.dot(camForward) >= cosHalfFov) visibleCount += 1;
         }
-        return false;
+        return visibleCount;
     }
 
     function spawnAnimalsNearPlayer(maxAnimals = 18) {
@@ -130,7 +131,7 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
             trySpawnAt(rx, rz);
         }
 
-        if (animals.length >= dynamicMaxAnimals || hasAnimalInView()) return;
+        if (animals.length >= dynamicMaxAnimals) return;
 
         const camForward = new THREE.Vector3();
         camera.getWorldDirection(camForward);
@@ -138,12 +139,19 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
         if (camForward.lengthSq() < 0.0001) return;
         camForward.normalize();
 
-        for (let i = 0; i < 10 && animals.length < dynamicMaxAnimals; i++) {
-            const distance = 10 + Math.random() * 18;
-            const sideOffset = (Math.random() - 0.5) * 10;
+        const minVisibleAnimals = 5;
+        let visibleCount = countAnimalsInView();
+        const remainingSlots = dynamicMaxAnimals - animals.length;
+        const maxViewSpawnAttempts = Math.min(40, Math.max(10, remainingSlots * 6));
+
+        for (let i = 0; i < maxViewSpawnAttempts && animals.length < dynamicMaxAnimals && visibleCount < minVisibleAnimals; i++) {
+            const distance = 8 + Math.random() * 20;
+            const sideOffset = (Math.random() - 0.5) * 14;
             const rx = Math.floor(px + camForward.x * distance - camForward.z * sideOffset);
             const rz = Math.floor(pz + camForward.z * distance + camForward.x * sideOffset);
-            if (trySpawnAt(rx, rz)) break;
+            if (trySpawnAt(rx, rz)) {
+                visibleCount = countAnimalsInView();
+            }
         }
     }
 
