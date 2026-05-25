@@ -969,6 +969,7 @@ camera.position.set(0, 30, 0);
 
 const playerAnchor = new THREE.Vector3(0, 30, 0);
 const thirdPersonDistance = 4.2;
+const thirdPersonFrontDistance = 3.2;
 
 function createPlayerModel() {
     const g = new THREE.Group();
@@ -988,6 +989,15 @@ function createPlayerModel() {
     const legR = legL.clone();
     legR.position.x = 0.16;
     g.add(head, body, armL, armR, legL, legR);
+    g.userData = {
+        head,
+        armL,
+        armR,
+        legL,
+        legR,
+        walkPhase: 0,
+        lastPos: new THREE.Vector3()
+    };
     g.visible = false;
     return g;
 }
@@ -1061,21 +1071,30 @@ function animate() {
         } else if (groundH !== -999) { canJump = false; }
         if (camera.position.y < -30) camera.position.set(0, 30, 0);
 
-        playerAnchor.copy(camera.position);
+        playerAnchor.set(camera.position.x, camera.position.y - currentHeight, camera.position.z);
         const viewDir = new THREE.Vector3();
         camera.getWorldDirection(viewDir);
         viewDir.y = 0;
         if (viewDir.lengthSq() > 0.0001) {
-            playerModel.rotation.y = Math.atan2(viewDir.x, viewDir.z);
+            playerModel.rotation.y = Math.atan2(viewDir.x, viewDir.z) + Math.PI;
         }
         playerModel.position.copy(playerAnchor);
 
+        const pdata = playerModel.userData;
+        const horizontalSpeed = Math.hypot(velocity.x, velocity.z);
+        pdata.walkPhase += dt * Math.min(10, horizontalSpeed * 0.45 + 2.5);
+        const swing = horizontalSpeed > 0.2 ? Math.sin(pdata.walkPhase) * 0.65 : 0;
+        pdata.legL.rotation.x = swing;
+        pdata.legR.rotation.x = -swing;
+        pdata.armL.rotation.x = -swing * 0.75;
+        pdata.armR.rotation.x = swing * 0.75;
+
         if (isThirdPerson) {
-            const back = viewDir.lengthSq() > 0.0001 ? viewDir.clone().normalize() : new THREE.Vector3(0, 0, 1);
+            const front = viewDir.lengthSq() > 0.0001 ? viewDir.clone().normalize() : new THREE.Vector3(0, 0, 1);
             camera.position.set(
-                playerAnchor.x - back.x * thirdPersonDistance,
+                playerAnchor.x + front.x * thirdPersonFrontDistance,
                 playerAnchor.y + 1.7,
-                playerAnchor.z - back.z * thirdPersonDistance
+                playerAnchor.z + front.z * thirdPersonFrontDistance
             );
             camera.lookAt(playerAnchor.x, playerAnchor.y + 1.35, playerAnchor.z);
             fpHandEl.style.display = 'none';
