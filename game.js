@@ -773,6 +773,13 @@ for (let i = 0; i < 9; i++) {
     slots.push(slot);
 }
 
+function playHandSwing() {
+    if (!controls.isLocked || inventoryOpen) return;
+    fpHandEl.classList.remove('swing');
+    void fpHandEl.offsetWidth;
+    fpHandEl.classList.add('swing');
+}
+
 function renderHeldItemInHand() {
     const selectedSlot = inventory.getSlots(27, 36)[selectedIdx];
     if (!selectedSlot) {
@@ -861,6 +868,7 @@ window.addEventListener('wheel', (e) => {
 
 window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
+    playHandSwing();
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
     const interactableBlocks = getNearbyBlocks(camera.position.x, camera.position.z, 4);

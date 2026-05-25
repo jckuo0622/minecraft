@@ -190,3 +190,18 @@ body { margin: 0; overflow: hidden; background-color: #000; }
 .avatar-leg{top:76px;width:12px;height:48px;background:#3f4a5d;}
 .avatar-leg.left{left:30px;}
 .avatar-leg.right{left:46px;}
+
+
+#first-person-hand.swing .fp-arm{animation:fp-swing-arm .16s ease-out;}
+#first-person-hand.swing.has-item .fp-held-item{animation:fp-swing-item .16s ease-out;}
+
+@keyframes fp-swing-arm{
+  0%{transform:rotate(-24deg) translate(0,0);} 
+  40%{transform:rotate(-52deg) translate(-8px,8px);} 
+  100%{transform:rotate(-24deg) translate(0,0);} 
+}
+@keyframes fp-swing-item{
+  0%{transform:rotate(-32deg) translate(0,0);} 
+  40%{transform:rotate(-58deg) translate(-10px,10px);} 
+  100%{transform:rotate(-32deg) translate(0,0);} 
+}
