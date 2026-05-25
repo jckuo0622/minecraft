@@ -50,6 +50,7 @@ function createAnimal(animalType, x, y, z) {
 
     mob.add(body, head, nose);
     mob.position.set(x, y, z);
+    mob.scale.setScalar(1.45);
     mob.userData = {
         animalType,
         velocityY: 0,
@@ -80,13 +81,13 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
         const y = getSurfaceHeightApprox(rx, rz) + 0.01;
         if (y < -8) return false;
         const near = getNearbyBlocks(rx + 0.5, rz + 0.5, 2);
-        const ground = getGroundAt(rx + 0.5, rz + 0.5, near, 0.25, y + 0.2);
+        const ground = getGroundAt(rx + 0.5, rz + 0.5, near, 0.36, y + 0.35);
         if (ground === -999) return false;
-        const blocked = checkWall(rx + 0.5, ground + 0.9, rz + 0.5, near, 0.24);
+        const blocked = checkWall(rx + 0.5, ground + 1.15, rz + 0.5, near, 0.36);
         if (blocked) return false;
 
         const type = chooseAnimalType(rx, rz);
-        const spawnY = ground + 0.08;
+        const spawnY = ground + 0.28;
         const mob = createAnimal(type, rx + 0.5, spawnY, rz + 0.5);
         scene.add(mob);
         animals.push(mob);
@@ -175,11 +176,11 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
             const nearby = getNearbyBlocks(mob.position.x, mob.position.z, 3);
 
             const currentFeetY = mob.position.y + 0.15;
-            const currentGround = getGroundAt(mob.position.x, mob.position.z, nearby, 0.25, currentFeetY);
-            const nextGround = getGroundAt(nextX, nextZ, nearby, 0.25, currentFeetY);
+            const currentGround = getGroundAt(mob.position.x, mob.position.z, nearby, 0.36, currentFeetY);
+            const nextGround = getGroundAt(nextX, nextZ, nearby, 0.36, currentFeetY);
 
-            const blockedX = checkWall(nextX, mob.position.y + 1.0, mob.position.z, nearby, 0.24);
-            const blockedZ = checkWall(mob.position.x, mob.position.y + 1.0, nextZ, nearby, 0.24);
+            const blockedX = checkWall(nextX, mob.position.y + 1.2, mob.position.z, nearby, 0.36);
+            const blockedZ = checkWall(mob.position.x, mob.position.y + 1.2, nextZ, nearby, 0.36);
             const dropTooHigh = currentGround !== -999 && nextGround !== -999 && (currentGround - nextGround) > 1.1;
             const voidAhead = currentGround !== -999 && nextGround === -999;
             const steepDropAhead = dropTooHigh || voidAhead;
@@ -205,8 +206,8 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
                 if (data.stuckTime > 1.2) {
                     const nudgeX = mob.position.x + data.direction.x * 0.25;
                     const nudgeZ = mob.position.z + data.direction.z * 0.25;
-                    const nudgeBlocked = checkWall(nudgeX, mob.position.y + 1.0, nudgeZ, nearby, 0.24);
-                    const nudgeGround = getGroundAt(nudgeX, nudgeZ, nearby, 0.25, mob.position.y + 0.15);
+                    const nudgeBlocked = checkWall(nudgeX, mob.position.y + 1.2, nudgeZ, nearby, 0.36);
+                    const nudgeGround = getGroundAt(nudgeX, nudgeZ, nearby, 0.36, mob.position.y + 0.15);
                     if (!nudgeBlocked && nudgeGround !== -999) {
                         mob.position.x = nudgeX;
                         mob.position.z = nudgeZ;
@@ -220,7 +221,7 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
             data.velocityY -= 20 * dt;
             const nearbyAfterMove = getNearbyBlocks(mob.position.x, mob.position.z, 3);
             const feetY = mob.position.y + 0.15;
-            const ground = getGroundAt(mob.position.x, mob.position.z, nearbyAfterMove, 0.25, feetY);
+            const ground = getGroundAt(mob.position.x, mob.position.z, nearbyAfterMove, 0.36, feetY);
             if (ground !== -999) {
                 const nextY = mob.position.y + data.velocityY * dt;
                 mob.position.y = Math.max(nextY, ground);
