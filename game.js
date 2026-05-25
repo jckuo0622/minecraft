@@ -69,6 +69,9 @@ const furnaceInputEl = document.getElementById('furnace-input');
 const furnaceFuelEl = document.getElementById('furnace-fuel');
 const furnaceOutputEl = document.getElementById('furnace-output');
 const furnaceProgressFillEl = document.getElementById('furnace-progress-fill');
+const fpHandEl = document.getElementById('first-person-hand');
+const fpHeldItemEl = document.getElementById('fp-held-item');
+
 let inventoryOpen = false;
 let craftingMode = 'inventory'; // inventory | table | furnace
 let openedInventoryFromLock = false;
@@ -77,6 +80,7 @@ let craftSlots = Array.from({ length: 4 }, () => null);
 let activeFurnaceKey = null;
 const furnaceStates = new Map();
 const equipment = { helmet: null, chest: null, legs: null, boots: null };
+let selectedIdx = 0;
 
 
 function setCraftMode(mode) {
@@ -211,6 +215,7 @@ function renderEquipment() {
             renderInventory(); renderHotbar(); renderEquipment();
         };
     });
+    renderHeldItemInHand();
 }
 
 function setCraftMessage(msg) {
@@ -244,6 +249,7 @@ function renderInventory() {
             renderQuickCraft();
         });
     });
+    renderHeldItemInHand();
 }
 
 
@@ -491,6 +497,7 @@ function renderQuickCraft() {
         row.appendChild(btn);
         quickCraftList.appendChild(row);
     });
+    renderHeldItemInHand();
 }
 
 function toggleInventory(mode = 'inventory') {
@@ -504,6 +511,7 @@ function toggleInventory(mode = 'inventory') {
             controls.unlock(); // 開背包時解鎖游標
         }
         inventoryPanel.classList.add('open');
+        fpHandEl.style.display = 'none';
         renderInventory();
         renderCrafting();
         renderFurnace();
@@ -513,6 +521,7 @@ function toggleInventory(mode = 'inventory') {
         setCraftMessage('');
     } else {
         inventoryPanel.classList.remove('open');
+        fpHandEl.style.display = controls.isLocked ? 'block' : 'none';
         if (openedInventoryFromLock) {
             controls.lock(); // 關背包時回到遊戲鎖定
         }
@@ -562,6 +571,7 @@ const dropSystem = createDropSystem({
     getMaterials,
     onInventoryUpdated: () => {
         renderHotbar();
+        renderHeldItemInHand();
         if (inventoryOpen) { renderInventory(); renderCrafting(); }
     },
     getPlayerFeetY: () => camera.position.y - currentHeight
@@ -652,6 +662,7 @@ function updateNeighbors(x, y, z) {
             addBlockMesh(m);
         }
     });
+    renderHeldItemInHand();
 }
 
 // 生成區塊（改為由 Worker 負責地圖資料計算）
@@ -665,6 +676,7 @@ function spawnChunk(cx, cz) {
         cz,
         removedBlocks: Array.from(removedBlocks)
     });
+    renderHeldItemInHand();
 }
 
 worldWorker.onmessage = (event) => {
@@ -740,6 +752,7 @@ function renderHotbar() {
         icon.style.backgroundImage = `url(${itemIconDataUrl[entry.itemId] || ''})`;
         label.textContent = `x${entry.count}`;
     });
+    renderHeldItemInHand();
 }
 
 for (let i = 0; i < 9; i++) {
@@ -760,6 +773,17 @@ for (let i = 0; i < 9; i++) {
     slots.push(slot);
 }
 
+function renderHeldItemInHand() {
+    const selectedSlot = inventory.getSlots(27, 36)[selectedIdx];
+    if (!selectedSlot) {
+        fpHeldItemEl.style.backgroundImage = '';
+        fpHeldItemEl.style.display = 'none';
+        return;
+    }
+    fpHeldItemEl.style.display = 'block';
+    fpHeldItemEl.style.backgroundImage = `url(${itemIconDataUrl[selectedSlot.itemId] || ''})`;
+}
+
 function updateSelection(idx) {
     slots.forEach((s, i) => {
         if (i === idx) {
@@ -772,10 +796,12 @@ function updateSelection(idx) {
             s.style.transform = 'scale(1)';
         }
     });
+    renderHeldItemInHand();
 }
 renderHotbar();
 renderEquipment();
 updateSelection(0);
+renderHeldItemInHand();
 
 // --- D. 控制與點擊 ---
 document.getElementById('btn-play').addEventListener('click', () => controls.lock());
@@ -783,6 +809,7 @@ controls.addEventListener('lock', () => {
     overlay.style.display = 'none';
     crosshair.style.display = inventoryOpen ? 'none' : 'block';
     hotbar.style.display = 'flex';
+    fpHandEl.style.display = inventoryOpen ? 'none' : 'block';
 });
 controls.addEventListener('unlock', () => {
     if (unlockingForInventory) {
@@ -790,14 +817,15 @@ controls.addEventListener('unlock', () => {
         overlay.style.display = 'none';
         crosshair.style.display = 'none';
         hotbar.style.display = 'flex';
+        fpHandEl.style.display = 'none';
         return;
     }
     overlay.style.display = 'flex';
     crosshair.style.display = 'none';
     hotbar.style.display = 'none';
+    fpHandEl.style.display = 'none';
 });
 
-let selectedIdx = 0;
 const velocity = new THREE.Vector3();
 const playerRadius = 0.35;
 let canJump = false, isCrouching = false, currentHeight = 1.8;
