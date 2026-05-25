@@ -70,30 +70,88 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
     const spawnedAnimalCells = new Set();
 
     function animalCellKey(x, z) {
-        return `${Math.floor(x / 12)},${Math.floor(z / 12)}`;
+        return `${Math.floor(x / 10)},${Math.floor(z / 10)}`;
+    }
+
+    function trySpawnAt(rx, rz) {
+        const cell = animalCellKey(rx, rz);
+        if (spawnedAnimalCells.has(cell)) return false;
+
+        const y = getSurfaceHeightApprox(rx, rz) + 0.01;
+        if (y < -8) return false;
+        const near = getNearbyBlocks(rx + 0.5, rz + 0.5, 2);
+        const ground = getGroundAt(rx + 0.5, rz + 0.5, near, 0.25, y + 0.2);
+        if (ground === -999) return false;
+        const blocked = checkWall(rx + 0.5, ground + 0.9, rz + 0.5, near, 0.24);
+        if (blocked) return false;
+
+        const type = chooseAnimalType(rx, rz);
+        const mob = createAnimal(type, rx + 0.5, ground, rz + 0.5);
+        scene.add(mob);
+        animals.push(mob);
+        spawnedAnimalCells.add(cell);
+        return true;
+    }
+
+    function countAnimalsInView(maxDistance = 42) {
+        const camForward = new THREE.Vector3();
+        camera.getWorldDirection(camForward);
+        camForward.y = 0;
+        if (camForward.lengthSq() < 0.0001) return 0;
+        camForward.normalize();
+        const cosHalfFov = Math.cos(Math.PI / 6);
+        const maxDistSq = maxDistance * maxDistance;
+        let visibleCount = 0;
+
+        for (const mob of animals) {
+            const toMob = new THREE.Vector3(
+                mob.position.x - camera.position.x,
+                0,
+                mob.position.z - camera.position.z
+            );
+            const distSq = toMob.lengthSq();
+            if (distSq > maxDistSq || distSq < 4) continue;
+            toMob.normalize();
+            if (toMob.dot(camForward) >= cosHalfFov) visibleCount += 1;
+        }
+        return visibleCount;
     }
 
     function spawnAnimalsNearPlayer(maxAnimals = 18) {
-        if (animals.length >= maxAnimals) return;
+        const dynamicMaxAnimals = Math.max(maxAnimals, 28);
+        if (animals.length >= dynamicMaxAnimals) return;
         const px = Math.floor(camera.position.x);
         const pz = Math.floor(camera.position.z);
-        for (let i = 0; i < 2 && animals.length < maxAnimals; i++) {
-            const rx = px + Math.floor((Math.random() - 0.5) * 44);
-            const rz = pz + Math.floor((Math.random() - 0.5) * 44);
-            const cell = animalCellKey(rx, rz);
-            if (spawnedAnimalCells.has(cell)) continue;
-            const y = getSurfaceHeightApprox(rx, rz) + 0.01;
-            if (y < -8) continue;
-            const near = getNearbyBlocks(rx + 0.5, rz + 0.5, 2);
-            const ground = getGroundAt(rx + 0.5, rz + 0.5, near, 0.25, y + 0.2);
-            if (ground === -999) continue;
-            const blocked = checkWall(rx + 0.5, ground + 0.9, rz + 0.5, near, 0.24);
-            if (blocked) continue;
-            const type = chooseAnimalType(rx, rz);
-            const mob = createAnimal(type, rx + 0.5, ground, rz + 0.5);
-            scene.add(mob);
-            animals.push(mob);
-            spawnedAnimalCells.add(cell);
+
+        for (let i = 0; i < 4 && animals.length < dynamicMaxAnimals; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = 10 + Math.random() * 24;
+            const rx = Math.floor(px + Math.cos(angle) * distance);
+            const rz = Math.floor(pz + Math.sin(angle) * distance);
+            trySpawnAt(rx, rz);
+        }
+
+        if (animals.length >= dynamicMaxAnimals) return;
+
+        const camForward = new THREE.Vector3();
+        camera.getWorldDirection(camForward);
+        camForward.y = 0;
+        if (camForward.lengthSq() < 0.0001) return;
+        camForward.normalize();
+
+        const minVisibleAnimals = 5;
+        let visibleCount = countAnimalsInView();
+        const remainingSlots = dynamicMaxAnimals - animals.length;
+        const maxViewSpawnAttempts = Math.min(40, Math.max(10, remainingSlots * 6));
+
+        for (let i = 0; i < maxViewSpawnAttempts && animals.length < dynamicMaxAnimals && visibleCount < minVisibleAnimals; i++) {
+            const distance = 8 + Math.random() * 20;
+            const sideOffset = (Math.random() - 0.5) * 14;
+            const rx = Math.floor(px + camForward.x * distance - camForward.z * sideOffset);
+            const rz = Math.floor(pz + camForward.z * distance + camForward.x * sideOffset);
+            if (trySpawnAt(rx, rz)) {
+                visibleCount = countAnimalsInView();
+            }
         }
     }
 
@@ -193,7 +251,17 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
 
             const dx = mob.position.x - camera.position.x;
             const dz = mob.position.z - camera.position.z;
-            if (dx * dx + dz * dz > 110 * 110) {
+            const distSq = dx * dx + dz * dz;
+
+            if (distSq < 12 * 12 && data.blockedTurnCooldown <= 0.05) {
+                const away = new THREE.Vector3(dx, 0, dz);
+                if (away.lengthSq() > 0.0001) {
+                    away.normalize();
+                    data.direction.lerp(away, 0.35).normalize();
+                }
+            }
+
+            if (distSq > 110 * 110) {
                 scene.remove(mob);
                 animals.splice(i, 1);
                 spawnedAnimalCells.delete(animalCellKey(mob.position.x, mob.position.z));
