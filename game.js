@@ -82,6 +82,7 @@ const furnaceStates = new Map();
 const equipment = { helmet: null, chest: null, legs: null, boots: null };
 let selectedIdx = 0;
 let isThirdPerson = false;
+let lastViewToggleAt = 0;
 
 
 function setCraftMode(mode) {
@@ -853,6 +854,9 @@ document.addEventListener('keydown', (e) => {
     }
     if (e.code === 'KeyQ') {
         if (e.repeat) return;
+        const now = performance.now();
+        if (now - lastViewToggleAt < 180) return;
+        lastViewToggleAt = now;
         isThirdPerson = !isThirdPerson;
         playerModel.visible = isThirdPerson && controls.isLocked;
         fpHandEl.style.display = (!isThirdPerson && controls.isLocked && !inventoryOpen) ? 'block' : 'none';
@@ -981,7 +985,7 @@ function createPlayerModel() {
     faceTex.magFilter = THREE.NearestFilter;
     faceTex.minFilter = THREE.NearestFilter;
     const faceMat = new THREE.MeshLambertMaterial({ map: faceTex });
-    const headMats = [skin, skin, skin, skin, faceMat, skin];
+    const headMats = [skin, skin, skin, skin, faceMat, faceMat];
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.56, 0.56), headMats);
     head.position.y = 1.55;
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.72, 0.3), shirt);
