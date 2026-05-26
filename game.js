@@ -587,7 +587,7 @@ function createZombie(x, y, z) {
     const legR = legL.clone(); legR.position.x = 0.16;
     zGroup.add(head, body, armL, armR, legL, legR);
     zGroup.position.set(x, y, z);
-    zGroup.userData = { health: 5, hitCooldown: 0, velocityY: 0, phase: Math.random() * Math.PI * 2, arms: [armL, armR], legs: [legL, legR], canJump: false };
+    zGroup.userData = { health: 5, hitCooldown: 0, velocityY: 0, phase: Math.random() * Math.PI * 2, arms: [armL, armR], legs: [legL, legR], canJump: true };
     return zGroup;
 }
 
@@ -634,15 +634,16 @@ function updateZombies(dt) {
         const blocked = checkWall(nx, z.position.y + 1.1, nz, nearAhead, 0.34);
         const currentGround = getGroundAt(z.position.x, z.position.z, near, 0.34, z.position.y + 0.8);
         const gy = getGroundAt(nx, nz, nearAhead, 0.34, z.position.y + 1.2);
-        const canStep = currentGround !== -999 && gy !== -999 && (gy - currentGround) <= 1.05;
-        const canJumpUp = currentGround !== -999 && gy !== -999 && (gy - currentGround) > 1.05 && (gy - currentGround) <= 1.4;
+        const heightDiff = currentGround !== -999 && gy !== -999 ? (gy - currentGround) : 0;
+        const canStep = currentGround !== -999 && gy !== -999 && heightDiff <= 1.05;
+        const canJumpUp = currentGround !== -999 && gy !== -999 && heightDiff > 0.7 && heightDiff <= 1.6;
         if (!blocked && gy !== -999 && canStep) {
             z.position.x = nx; z.position.z = nz; z.position.y = gy;
         } else if (canJumpUp && d.canJump) {
             d.velocityY = 9.5;
             d.canJump = false;
-            z.position.x += toPlayer.x * 0.24;
-            z.position.z += toPlayer.z * 0.24;
+            z.position.x += toPlayer.x * 0.32;
+            z.position.z += toPlayer.z * 0.32;
         }
 
         if (currentGround !== -999) d.velocityY -= 28 * dt;
