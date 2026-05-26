@@ -120,12 +120,12 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
     }
 
     function spawnAnimalsNearPlayer(maxAnimals = 18) {
-        const dynamicMaxAnimals = Math.max(maxAnimals, 120);
+        const dynamicMaxAnimals = Math.max(maxAnimals, 52);
         if (animals.length >= dynamicMaxAnimals) return;
         const px = Math.floor(camera.position.x);
         const pz = Math.floor(camera.position.z);
 
-        for (let i = 0; i < 14 && animals.length < dynamicMaxAnimals; i++) {
+        for (let i = 0; i < 7 && animals.length < dynamicMaxAnimals; i++) {
             const angle = Math.random() * Math.PI * 2;
             const distance = 10 + Math.random() * 24;
             const rx = Math.floor(px + Math.cos(angle) * distance);
@@ -141,14 +141,14 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
         if (camForward.lengthSq() < 0.0001) return;
         camForward.normalize();
 
-        const minVisibleAnimals = 24;
+        const minVisibleAnimals = 10;
         let visibleCount = countAnimalsInView();
         const remainingSlots = dynamicMaxAnimals - animals.length;
-        const maxViewSpawnAttempts = Math.min(180, Math.max(40, remainingSlots * 10));
+        const maxViewSpawnAttempts = Math.min(80, Math.max(18, remainingSlots * 6));
 
         for (let i = 0; i < maxViewSpawnAttempts && animals.length < dynamicMaxAnimals && visibleCount < minVisibleAnimals; i++) {
-            const distance = 6 + Math.random() * 30;
-            const sideOffset = (Math.random() - 0.5) * 24;
+            const distance = 8 + Math.random() * 22;
+            const sideOffset = (Math.random() - 0.5) * 16;
             const rx = Math.floor(px + camForward.x * distance - camForward.z * sideOffset);
             const rz = Math.floor(pz + camForward.z * distance + camForward.x * sideOffset);
             if (trySpawnAt(rx, rz)) {
@@ -196,7 +196,7 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
                 mob.position.z = nextZ;
                 moved = true;
             }
-            if (!moved && canJumpUp && (blockedX || blockedZ) && data.velocityY <= 0.01) {
+            if (!moved && canJumpUp && data.velocityY <= 0.01) {
                 data.velocityY = 9.5;
                 mob.position.x += data.direction.x * 0.12;
                 mob.position.z += data.direction.z * 0.12;
