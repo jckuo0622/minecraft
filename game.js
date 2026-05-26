@@ -861,17 +861,12 @@ document.addEventListener('keydown', (e) => {
         const now = performance.now();
         if (now - lastViewToggleAt < 180) return;
         lastViewToggleAt = now;
-        if (isThirdPerson) {
-            playerAnchor.set(camera.position.x, camera.position.y - currentHeight, camera.position.z);
-            const d = new THREE.Vector3();
-            camera.getWorldDirection(d);
-            d.y = 0;
-            if (d.lengthSq() > 0.0001) {
-                d.normalize();
-                thirdPersonYaw = Math.atan2(d.x, d.z);
-            }
-        } else {
-            camera.position.set(playerAnchor.x, playerAnchor.y + currentHeight, playerAnchor.z);
+        const d = new THREE.Vector3();
+        camera.getWorldDirection(d);
+        d.y = 0;
+        if (d.lengthSq() > 0.0001) {
+            d.normalize();
+            thirdPersonYaw = Math.atan2(d.x, d.z);
         }
         isThirdPerson = !isThirdPerson;
         playerModel.visible = isThirdPerson && controls.isLocked;
