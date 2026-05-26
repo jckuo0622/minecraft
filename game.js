@@ -870,6 +870,7 @@ document.addEventListener('keydown', (e) => {
         }
         const nextThirdPerson = !isThirdPerson;
         if (!nextThirdPerson) {
+            thirdPersonYaw += Math.PI;
             camera.position.set(playerAnchor.x, playerAnchor.y + currentHeight, playerAnchor.z);
             velocity.y = 0;
             canJump = true;
