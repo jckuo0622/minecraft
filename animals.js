@@ -183,6 +183,7 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
             const blockedZ = checkWall(mob.position.x, mob.position.y + 1.2, nextZ, nearby, 0.36);
             const dropTooHigh = currentGround !== -999 && nextGround !== -999 && (currentGround - nextGround) > 1.1;
             const stepUpTooHigh = currentGround !== -999 && nextGround !== -999 && (nextGround - currentGround) > 1.05;
+            const canJumpUp = currentGround !== -999 && nextGround !== -999 && (nextGround - currentGround) > 1.05 && (nextGround - currentGround) <= 1.35;
             const voidAhead = currentGround !== -999 && nextGround === -999;
             const steepDropAhead = dropTooHigh || voidAhead || stepUpTooHigh;
 
@@ -193,6 +194,12 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
             }
             if (!blockedZ && !steepDropAhead) {
                 mob.position.z = nextZ;
+                moved = true;
+            }
+            if (!moved && canJumpUp && (blockedX || blockedZ) && data.velocityY <= 0.01) {
+                data.velocityY = 8.5;
+                mob.position.x += data.direction.x * 0.12;
+                mob.position.z += data.direction.z * 0.12;
                 moved = true;
             }
             if (moved && currentGround !== -999 && nextGround !== -999 && nextGround > currentGround) {

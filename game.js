@@ -634,8 +634,13 @@ function updateZombies(dt) {
         const currentGround = getGroundAt(z.position.x, z.position.z, near, 0.34, z.position.y + 0.8);
         const gy = getGroundAt(nx, nz, near, 0.34, z.position.y + 0.8);
         const canStep = currentGround !== -999 && gy !== -999 && (gy - currentGround) <= 1.05;
+        const canJumpUp = currentGround !== -999 && gy !== -999 && (gy - currentGround) > 1.05 && (gy - currentGround) <= 1.4;
         if (!blocked && gy !== -999 && canStep) {
             z.position.x = nx; z.position.z = nz; z.position.y = gy;
+        } else if (canJumpUp) {
+            z.position.x += toPlayer.x * 0.1;
+            z.position.z += toPlayer.z * 0.1;
+            z.position.y = gy;
         }
         d.phase += dt * 8;
         d.legs[0].rotation.x = Math.sin(d.phase) * 0.5;
