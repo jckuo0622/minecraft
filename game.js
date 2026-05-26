@@ -587,7 +587,7 @@ function createZombie(x, y, z) {
     const legR = legL.clone(); legR.position.x = 0.16;
     zGroup.add(head, body, armL, armR, legL, legR);
     zGroup.position.set(x, y, z);
-    zGroup.userData = { health: 5, hitCooldown: 0, velocityY: 0, phase: Math.random() * Math.PI * 2, arms: [armL, armR], legs: [legL, legR] };
+    zGroup.userData = { health: 5, hitCooldown: 0, velocityY: 0, phase: Math.random() * Math.PI * 2, arms: [armL, armR], legs: [legL, legR], canJump: false };
     return zGroup;
 }
 
@@ -637,10 +637,21 @@ function updateZombies(dt) {
         const canJumpUp = currentGround !== -999 && gy !== -999 && (gy - currentGround) > 1.05 && (gy - currentGround) <= 1.4;
         if (!blocked && gy !== -999 && canStep) {
             z.position.x = nx; z.position.z = nz; z.position.y = gy;
-        } else if (canJumpUp) {
+        } else if (canJumpUp && d.canJump) {
+            d.velocityY = 9.5;
+            d.canJump = false;
             z.position.x += toPlayer.x * 0.1;
             z.position.z += toPlayer.z * 0.1;
-            z.position.y = gy;
+        }
+
+        if (currentGround !== -999) d.velocityY -= 28 * dt;
+        z.position.y += d.velocityY * dt;
+        const feetY = z.position.y + 0.1;
+        const gNow = getGroundAt(z.position.x, z.position.z, near, 0.34, feetY);
+        if (gNow !== -999 && z.position.y <= gNow) {
+            z.position.y = gNow;
+            d.velocityY = 0;
+            d.canJump = true;
         }
         d.phase += dt * 8;
         d.legs[0].rotation.x = Math.sin(d.phase) * 0.5;
@@ -651,9 +662,9 @@ function updateZombies(dt) {
 
         if (dist < 1.4 && d.hitCooldown <= 0) {
             d.hitCooldown = 0.9;
-            velocity.x += toPlayer.x * 7.5;
-            velocity.z += toPlayer.z * 7.5;
-            velocity.y += 2.8;
+            velocity.x += toPlayer.x * 11.5;
+            velocity.z += toPlayer.z * 11.5;
+            velocity.y += 5.2;
         }
         const dx = z.position.x - camera.position.x;
         const dz = z.position.z - camera.position.z;
@@ -1011,8 +1022,9 @@ window.addEventListener('mousedown', (e) => {
             const idx = zombies.indexOf(target);
             const away = new THREE.Vector3(target.position.x - camera.position.x, 0, target.position.z - camera.position.z);
             if (away.lengthSq() > 0.0001) away.normalize();
-            target.position.x += away.x * 1.2;
-            target.position.z += away.z * 1.2;
+            target.position.x += away.x * 1.9;
+            target.position.z += away.z * 1.9;
+            target.userData.velocityY = Math.max(target.userData.velocityY || 0, 4.8);
             target.userData.health -= 1;
             if (target.userData.health <= 0 && idx >= 0) {
                 scene.remove(target);

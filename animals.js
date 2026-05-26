@@ -197,7 +197,7 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
                 moved = true;
             }
             if (!moved && canJumpUp && (blockedX || blockedZ) && data.velocityY <= 0.01) {
-                data.velocityY = 8.5;
+                data.velocityY = 9.5;
                 mob.position.x += data.direction.x * 0.12;
                 mob.position.z += data.direction.z * 0.12;
                 moved = true;
