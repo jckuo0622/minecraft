@@ -706,8 +706,10 @@ function flushChunkBuildQueue(maxChunksPerFrame = 1) {
 
 const generationQueue = [];
 function updateWorld() {
-    const px = Math.floor(camera.position.x / CHUNK_SIZE);
-    const pz = Math.floor(camera.position.z / CHUNK_SIZE);
+    const worldX = isThirdPerson ? playerAnchor.x : camera.position.x;
+    const worldZ = isThirdPerson ? playerAnchor.z : camera.position.z;
+    const px = Math.floor(worldX / CHUNK_SIZE);
+    const pz = Math.floor(worldZ / CHUNK_SIZE);
     for (let x = -RENDER_DISTANCE; x <= RENDER_DISTANCE; x++) {
         for (let z = -RENDER_DISTANCE; z <= RENDER_DISTANCE; z++) {
             const key = `${px + x},${pz + z}`;
@@ -1048,11 +1050,7 @@ function animate() {
         if (groundH === -999) { velocity.y = 0; }
         else { velocity.y -= 28 * dt; }
 
-        const forward = new THREE.Vector3();
-        camera.getWorldDirection(forward);
-        forward.y = 0;
-        if (forward.lengthSq() < 0.0001) forward.set(playerFacingDir.x, 0, playerFacingDir.z);
-        forward.normalize();
+        const forward = new THREE.Vector3(playerFacingDir.x, 0, playerFacingDir.z).normalize();
         const right = new THREE.Vector3().crossVectors(camera.up, forward).normalize();
         const moveDir = new THREE.Vector3(0, 0, 0);
         if (keys['KeyW']) moveDir.add(forward);
