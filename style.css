@@ -20,12 +20,10 @@ body { margin: 0; overflow: hidden; background-color: #000; }
     z-index: 10;
     background-color: #141414;
     background-image:
-      radial-gradient(circle at 20% 15%, rgba(120, 175, 255, 0.35), transparent 40%),
-      radial-gradient(circle at 82% 80%, rgba(95, 225, 160, 0.18), transparent 42%),
-      linear-gradient(rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.65)),
-      repeating-linear-gradient(0deg, #2e2015 0px, #2e2015 2px, #372617 2px, #372617 4px),
-      repeating-linear-gradient(90deg, #3a2618 0px, #3a2618 2px, #422d1d 2px, #422d1d 4px);
-    background-size: auto, auto, auto, 48px 48px, 48px 48px;
+      linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.62)),
+      url('https://www.minecraft.net/content/dam/games/minecraft/key-art/MCV-keyart-default.jpg');
+    background-size: cover, cover;
+    background-position: center center, center center;
 }
 
 #menu {
