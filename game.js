@@ -859,15 +859,22 @@ document.addEventListener('keydown', (e) => {
         const now = performance.now();
         if (now - lastViewToggleAt < 180) return;
         lastViewToggleAt = now;
+        if (isThirdPerson) {
+            playerAnchor.set(camera.position.x, camera.position.y - currentHeight, camera.position.z);
+        } else {
+            camera.position.set(playerAnchor.x, playerAnchor.y + currentHeight, playerAnchor.z);
+        }
         isThirdPerson = !isThirdPerson;
         playerModel.visible = isThirdPerson && controls.isLocked;
         fpHandEl.style.display = (!isThirdPerson && controls.isLocked && !inventoryOpen) ? 'block' : 'none';
         return;
     }
     if (e.code === 'Space' && canJump) {
-        const feetY = camera.position.y - currentHeight;
-        const near = getNearbyBlocks(camera.position.x, camera.position.z, 2);
-        const blockedHead = checkCapsuleWall(camera.position.x, feetY + 0.05, camera.position.z, near, playerRadius, currentHeight + 0.2);
+        const px = isThirdPerson ? playerAnchor.x : camera.position.x;
+        const pz = isThirdPerson ? playerAnchor.z : camera.position.z;
+        const feetY = isThirdPerson ? playerAnchor.y : (camera.position.y - currentHeight);
+        const near = getNearbyBlocks(px, pz, 2);
+        const blockedHead = checkCapsuleWall(px, feetY + 0.05, pz, near, playerRadius, currentHeight + 0.2);
         if (!blockedHead) { velocity.y += 9.5; canJump = false; }
     }
     if (e.shiftKey) isCrouching = true;
@@ -1050,7 +1057,15 @@ function animate() {
         if (groundH === -999) { velocity.y = 0; }
         else { velocity.y -= 28 * dt; }
 
-        const forward = new THREE.Vector3(playerFacingDir.x, 0, playerFacingDir.z).normalize();
+        const forward = new THREE.Vector3();
+        if (isThirdPerson) {
+            forward.set(playerFacingDir.x, 0, playerFacingDir.z);
+        } else {
+            camera.getWorldDirection(forward);
+            forward.y = 0;
+            if (forward.lengthSq() < 0.0001) forward.set(playerFacingDir.x, 0, playerFacingDir.z);
+        }
+        forward.normalize();
         const right = new THREE.Vector3().crossVectors(camera.up, forward).normalize();
         const moveDir = new THREE.Vector3(0, 0, 0);
         if (keys['KeyW']) moveDir.add(forward);
