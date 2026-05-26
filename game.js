@@ -630,9 +630,10 @@ function updateZombies(dt) {
         const nx = z.position.x + toPlayer.x * step;
         const nz = z.position.z + toPlayer.z * step;
         const near = getNearbyBlocks(z.position.x, z.position.z, 3);
-        const blocked = checkWall(nx, z.position.y + 1.1, nz, near, 0.34);
+        const nearAhead = getNearbyBlocks(nx, nz, 3);
+        const blocked = checkWall(nx, z.position.y + 1.1, nz, nearAhead, 0.34);
         const currentGround = getGroundAt(z.position.x, z.position.z, near, 0.34, z.position.y + 0.8);
-        const gy = getGroundAt(nx, nz, near, 0.34, z.position.y + 0.8);
+        const gy = getGroundAt(nx, nz, nearAhead, 0.34, z.position.y + 1.2);
         const canStep = currentGround !== -999 && gy !== -999 && (gy - currentGround) <= 1.05;
         const canJumpUp = currentGround !== -999 && gy !== -999 && (gy - currentGround) > 1.05 && (gy - currentGround) <= 1.4;
         if (!blocked && gy !== -999 && canStep) {
@@ -640,8 +641,8 @@ function updateZombies(dt) {
         } else if (canJumpUp && d.canJump) {
             d.velocityY = 9.5;
             d.canJump = false;
-            z.position.x += toPlayer.x * 0.1;
-            z.position.z += toPlayer.z * 0.1;
+            z.position.x += toPlayer.x * 0.24;
+            z.position.z += toPlayer.z * 0.24;
         }
 
         if (currentGround !== -999) d.velocityY -= 28 * dt;
