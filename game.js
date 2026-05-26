@@ -567,6 +567,92 @@ const animalSystem = createAnimalSystem({
     getSurfaceHeightApprox
 });
 
+const zombies = [];
+let zombieSpawnTimer = 0;
+
+function createZombie(x, y, z) {
+    const zGroup = new THREE.Group();
+    const skin = new THREE.MeshLambertMaterial({ color: 0x7dbb7d });
+    const cloth = new THREE.MeshLambertMaterial({ color: 0x2a5f8e });
+    const pants = new THREE.MeshLambertMaterial({ color: 0x3b2f7a });
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.56, 0.56), skin);
+    head.position.y = 1.55;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.72, 0.3), cloth);
+    body.position.y = 1.02;
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), skin);
+    armL.position.set(-0.4, 1.03, 0.1);
+    const armR = armL.clone(); armR.position.x = 0.4;
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.72, 0.24), pants);
+    legL.position.set(-0.16, 0.32, 0);
+    const legR = legL.clone(); legR.position.x = 0.16;
+    zGroup.add(head, body, armL, armR, legL, legR);
+    zGroup.position.set(x, y, z);
+    zGroup.userData = { health: 5, hitCooldown: 0, velocityY: 0, phase: Math.random() * Math.PI * 2, arms: [armL, armR], legs: [legL, legR] };
+    return zGroup;
+}
+
+function spawnZombieNearPlayer() {
+    for (let t = 0; t < 8; t++) {
+        const ang = Math.random() * Math.PI * 2;
+        const dist = 10 + Math.random() * 18;
+        const x = Math.floor(camera.position.x + Math.cos(ang) * dist) + 0.5;
+        const z = Math.floor(camera.position.z + Math.sin(ang) * dist) + 0.5;
+        const near = getNearbyBlocks(x, z, 2);
+        const approx = getSurfaceHeightApprox(Math.round(x), Math.round(z));
+        const g = getGroundAt(x, z, near, 0.34, approx + 1.5);
+        if (g === -999) continue;
+        const wall = checkWall(x, g + 1.1, z, near, 0.34);
+        if (wall) continue;
+        const zombie = createZombie(x, g, z);
+        scene.add(zombie);
+        zombies.push(zombie);
+        return;
+    }
+}
+
+function updateZombies(dt) {
+    zombieSpawnTimer += dt;
+    if (zombieSpawnTimer >= 30) {
+        zombieSpawnTimer = 0;
+        spawnZombieNearPlayer();
+    }
+    for (let i = zombies.length - 1; i >= 0; i--) {
+        const z = zombies[i];
+        const d = z.userData;
+        d.hitCooldown = Math.max(0, d.hitCooldown - dt);
+        const toPlayer = new THREE.Vector3(camera.position.x - z.position.x, 0, camera.position.z - z.position.z);
+        const dist = toPlayer.length();
+        if (dist > 0.001) toPlayer.normalize();
+        const speed = 1.8;
+        const nx = z.position.x + toPlayer.x * speed * dt;
+        const nz = z.position.z + toPlayer.z * speed * dt;
+        const near = getNearbyBlocks(z.position.x, z.position.z, 3);
+        const blocked = checkWall(nx, z.position.y + 1.1, nz, near, 0.34);
+        const gy = getGroundAt(nx, nz, near, 0.34, z.position.y + 0.8);
+        if (!blocked && gy !== -999) {
+            z.position.x = nx; z.position.z = nz; z.position.y = gy;
+        }
+        d.phase += dt * 8;
+        d.legs[0].rotation.x = Math.sin(d.phase) * 0.5;
+        d.legs[1].rotation.x = Math.sin(d.phase + Math.PI) * 0.5;
+        d.arms[0].rotation.x = Math.sin(d.phase + Math.PI) * 0.35;
+        d.arms[1].rotation.x = Math.sin(d.phase) * 0.35;
+        z.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+
+        if (dist < 1.4 && d.hitCooldown <= 0) {
+            d.hitCooldown = 0.9;
+            velocity.x += toPlayer.x * 7.5;
+            velocity.z += toPlayer.z * 7.5;
+            velocity.y += 2.8;
+        }
+        const dx = z.position.x - camera.position.x;
+        const dz = z.position.z - camera.position.z;
+        if (dx * dx + dz * dz > 150 * 150) {
+            scene.remove(z); zombies.splice(i, 1);
+        }
+    }
+}
+
 const dropSystem = createDropSystem({
     scene,
     camera,
@@ -907,6 +993,24 @@ window.addEventListener('mousedown', (e) => {
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
     const interactableBlocks = getNearbyBlocks(camera.position.x, camera.position.z, 4);
     const intersects = raycaster.intersectObjects(interactableBlocks);
+    const zombieHits = raycaster.intersectObjects(zombies, true);
+    if (zombieHits.length > 0 && e.button === 0) {
+        const zombieRoot = zombieHits[0].object.parent;
+        const target = zombies.find(z => z === zombieRoot || z.children.includes(zombieHits[0].object));
+        if (target) {
+            const idx = zombies.indexOf(target);
+            const away = new THREE.Vector3(target.position.x - camera.position.x, 0, target.position.z - camera.position.z);
+            if (away.lengthSq() > 0.0001) away.normalize();
+            target.position.x += away.x * 1.2;
+            target.position.z += away.z * 1.2;
+            target.userData.health -= 1;
+            if (target.userData.health <= 0 && idx >= 0) {
+                scene.remove(target);
+                zombies.splice(idx, 1);
+            }
+            return;
+        }
+    }
     if (intersects.length > 0) {
         const intersect = intersects[0];
         const pos = intersect.object.position.clone();
@@ -1060,6 +1164,7 @@ function animate() {
         dropSystem.updateDrops(dt);
         animalSystem.spawnAnimalsNearPlayer();
         animalSystem.updateAnimals(dt);
+        updateZombies(dt);
 
         const targetH = isCrouching ? 1.2 : 1.8;
         currentHeight += (targetH - currentHeight) * 0.2;
