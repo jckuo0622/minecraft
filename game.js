@@ -83,6 +83,8 @@ const equipment = { helmet: null, chest: null, legs: null, boots: null };
 let selectedIdx = 0;
 let isThirdPerson = false;
 let lastViewToggleAt = 0;
+let thirdPersonYaw = 0;
+let thirdPersonPitch = -0.2;
 
 
 function setCraftMode(mode) {
@@ -861,6 +863,13 @@ document.addEventListener('keydown', (e) => {
         lastViewToggleAt = now;
         if (isThirdPerson) {
             playerAnchor.set(camera.position.x, camera.position.y - currentHeight, camera.position.z);
+            const d = new THREE.Vector3();
+            camera.getWorldDirection(d);
+            d.y = 0;
+            if (d.lengthSq() > 0.0001) {
+                d.normalize();
+                thirdPersonYaw = Math.atan2(d.x, d.z);
+            }
         } else {
             camera.position.set(playerAnchor.x, playerAnchor.y + currentHeight, playerAnchor.z);
         }
@@ -930,6 +939,11 @@ window.addEventListener('mousedown', (e) => {
             addBlockMesh(b);
         }
     }
+});
+window.addEventListener('mousemove', (e) => {
+    if (!controls.isLocked || !isThirdPerson) return;
+    thirdPersonYaw -= e.movementX * 0.0025;
+    thirdPersonPitch = Math.max(-0.9, Math.min(0.55, thirdPersonPitch - e.movementY * 0.0018));
 });
 window.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -1059,7 +1073,7 @@ function animate() {
 
         const forward = new THREE.Vector3();
         if (isThirdPerson) {
-            forward.set(playerFacingDir.x, 0, playerFacingDir.z);
+            forward.set(Math.sin(thirdPersonYaw), 0, Math.cos(thirdPersonYaw));
         } else {
             camera.getWorldDirection(forward);
             forward.y = 0;
@@ -1077,7 +1091,7 @@ function animate() {
             moveDir.normalize();
             velocity.x += moveDir.x * (isCrouching ? 25 : 65) * dt;
             velocity.z += moveDir.z * (isCrouching ? 25 : 65) * dt;
-            playerFacingDir.copy(moveDir).normalize();
+            if (!isThirdPerson) playerFacingDir.copy(moveDir).normalize();
         }
 
         const nextX = camera.position.x + velocity.x * dt;
@@ -1101,7 +1115,9 @@ function animate() {
         if (camera.position.y < -30) camera.position.set(0, 30, 0);
 
         playerAnchor.set(camera.position.x, camera.position.y - currentHeight, camera.position.z);
-        const viewDir = playerFacingDir.clone();
+        const viewDir = isThirdPerson
+            ? new THREE.Vector3(Math.sin(thirdPersonYaw), 0, Math.cos(thirdPersonYaw))
+            : playerFacingDir.clone();
         playerModel.rotation.y = Math.atan2(viewDir.x, viewDir.z) + Math.PI;
         playerModel.position.copy(playerAnchor);
 
@@ -1116,10 +1132,15 @@ function animate() {
 
         if (isThirdPerson) {
             const front = viewDir.lengthSq() > 0.0001 ? viewDir.clone().normalize() : new THREE.Vector3(0, 0, 1);
+            const camDir = new THREE.Vector3(
+                Math.sin(thirdPersonYaw) * Math.cos(thirdPersonPitch),
+                Math.sin(thirdPersonPitch),
+                Math.cos(thirdPersonYaw) * Math.cos(thirdPersonPitch)
+            ).normalize();
             camera.position.set(
-                playerAnchor.x + front.x * thirdPersonFrontDistance,
-                playerAnchor.y + 1.7,
-                playerAnchor.z + front.z * thirdPersonFrontDistance
+                playerAnchor.x + camDir.x * thirdPersonFrontDistance,
+                playerAnchor.y + 1.7 + camDir.y * thirdPersonFrontDistance,
+                playerAnchor.z + camDir.z * thirdPersonFrontDistance
             );
             camera.lookAt(playerAnchor.x, playerAnchor.y + 1.35, playerAnchor.z);
             fpHandEl.style.display = 'none';
