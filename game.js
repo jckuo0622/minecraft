@@ -868,7 +868,13 @@ document.addEventListener('keydown', (e) => {
             d.normalize();
             thirdPersonYaw = Math.atan2(d.x, d.z);
         }
-        isThirdPerson = !isThirdPerson;
+        const nextThirdPerson = !isThirdPerson;
+        if (!nextThirdPerson) {
+            camera.position.set(playerAnchor.x, playerAnchor.y + currentHeight, playerAnchor.z);
+            velocity.y = 0;
+            canJump = true;
+        }
+        isThirdPerson = nextThirdPerson;
         playerModel.visible = isThirdPerson && controls.isLocked;
         fpHandEl.style.display = (!isThirdPerson && controls.isLocked && !inventoryOpen) ? 'block' : 'none';
         return;
