@@ -624,12 +624,17 @@ function updateZombies(dt) {
         const dist = toPlayer.length();
         if (dist > 0.001) toPlayer.normalize();
         const speed = 1.8;
-        const nx = z.position.x + toPlayer.x * speed * dt;
-        const nz = z.position.z + toPlayer.z * speed * dt;
+        const minPlayerGap = 1.05;
+        const chaseDist = Math.max(0, dist - minPlayerGap);
+        const step = Math.min(chaseDist, speed * dt);
+        const nx = z.position.x + toPlayer.x * step;
+        const nz = z.position.z + toPlayer.z * step;
         const near = getNearbyBlocks(z.position.x, z.position.z, 3);
         const blocked = checkWall(nx, z.position.y + 1.1, nz, near, 0.34);
+        const currentGround = getGroundAt(z.position.x, z.position.z, near, 0.34, z.position.y + 0.8);
         const gy = getGroundAt(nx, nz, near, 0.34, z.position.y + 0.8);
-        if (!blocked && gy !== -999) {
+        const canStep = currentGround !== -999 && gy !== -999 && (gy - currentGround) <= 1.05;
+        if (!blocked && gy !== -999 && canStep) {
             z.position.x = nx; z.position.z = nz; z.position.y = gy;
         }
         d.phase += dt * 8;
