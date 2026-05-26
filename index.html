@@ -9,6 +9,10 @@
 <body>
     <div id="game-container"></div>
     <div id="crosshair">+</div>
+    <div id="first-person-hand" aria-hidden="true">
+        <div class="fp-arm"></div>
+        <div class="fp-held-item" id="fp-held-item"></div>
+    </div>
 
     <div id="overlay">
         <div id="menu">
@@ -31,7 +35,18 @@
             <div class="mc-panel">
                 <div class="mc-top-row">
                     <div class="mc-avatar-wrap">
-                        <div class="mc-avatar">Steve</div>
+                        <div class="mc-avatar" id="player-avatar">
+                            <div class="avatar-model" id="avatar-model">
+                                <div class="avatar-head">
+                                    <img class="avatar-face-front" src="./player-face.png" alt="player face" />
+                                </div>
+                                <div class="avatar-body"></div>
+                                <div class="avatar-arm left"></div>
+                                <div class="avatar-arm right"></div>
+                                <div class="avatar-leg left"></div>
+                                <div class="avatar-leg right"></div>
+                            </div>
+                        </div>
                         <div class="mc-equip-column" id="equip-column">
                             <div class="slot equip-slot" data-equip="helmet" title="頭盔"></div>
                             <div class="slot equip-slot" data-equip="chest" title="護甲"></div>
