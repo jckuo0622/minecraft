@@ -1,4 +1,21 @@
-body { margin: 0; overflow: hidden; background-color: #000; }
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&display=swap');
+
+:root {
+    --mc-black: #080808;
+    --mc-button-top: #9b9b9b;
+    --mc-button-bottom: #757575;
+    --mc-button-highlight: #c6c6c6;
+    --mc-button-shadow: #373737;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    overflow: hidden;
+    background-color: #000;
+    font-family: 'Noto Sans TC', 'Trebuchet MS', sans-serif;
+}
 
 #game-container { width: 100vw; height: 100vh; }
 
@@ -16,103 +33,237 @@ body { margin: 0; overflow: hidden; background-color: #000; }
     inset: 0;
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: flex-start;
     z-index: 10;
-    background-color: #141414;
+    overflow: hidden;
+    background-color: #274238;
     background-image:
-      linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.62)),
+      linear-gradient(to bottom, rgba(8, 14, 12, .06), rgba(5, 8, 7, .22) 54%, rgba(0, 0, 0, .62)),
       url('https://www.minecraft.net/content/dam/games/minecraft/key-art/MCV-keyart-default.jpg');
     background-size: cover, cover;
-    background-position: center center, center center;
+    background-position: center, center;
+    image-rendering: auto;
+}
+
+#overlay::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    pointer-events: none;
+    background:
+      linear-gradient(90deg, rgba(255,255,255,.025) 50%, transparent 50%),
+      linear-gradient(rgba(255,255,255,.02) 50%, transparent 50%);
+    background-size: 4px 4px;
+    box-shadow: inset 0 0 150px rgba(0, 0, 0, .62);
+    mix-blend-mode: overlay;
 }
 
 #menu {
-    width: min(92vw, 720px);
-    background: linear-gradient(#222, #191919);
-    border: 4px solid #0f0f0f;
-    box-shadow: 0 0 0 3px #595959, 0 0 0 6px #1e1e1e, 0 18px 45px rgba(0, 0, 0, .65);
-    padding: 24px 28px 18px;
+    position: relative;
+    width: min(92vw, 760px);
+    margin-top: clamp(7vh, 11vh, 120px);
+    padding: 0 28px;
     text-align: center;
-    font-family: 'Trebuchet MS', 'Noto Sans TC', sans-serif;
     color: #fff;
     image-rendering: pixelated;
+    z-index: 1;
 }
 
 .menu-logo {
-    margin-bottom: 4px;
+    position: relative;
+    width: min(100%, 690px);
+    margin: 0 auto clamp(74px, 12vh, 116px);
 }
 
 .menu-logo h1 {
+    position: relative;
     margin: 0;
-    letter-spacing: 2px;
-    font-size: clamp(2.2rem, 6vw, 3.6rem);
-    text-transform: uppercase;
-    font-weight: 900;
-    color: #f2f2f2;
-    text-shadow:
-      0 3px 0 #b6b6b6,
-      0 6px 0 #6d6d6d,
-      0 9px 0 #3d3d3d,
-      0 11px 14px rgba(0, 0, 0, .85);
+    line-height: .78;
+    transform: scaleX(1.04);
 }
 
-.menu-subtitle {
-    margin: 6px 0 18px;
-    color: #9eeaff;
-    font-size: .95rem;
-    letter-spacing: 1px;
+.logo-main {
+    display: block;
+    letter-spacing: clamp(-4px, -.45vw, -1px);
+    font-family: Impact, 'Arial Black', sans-serif;
+    font-size: clamp(4.2rem, 11vw, 7.4rem);
+    font-weight: 900;
+    color: #c7c7c7;
+    -webkit-text-stroke: clamp(2px, .35vw, 4px) #202020;
+    text-shadow:
+      0 3px 0 #f4f4f4,
+      0 7px 0 #7f7f7f,
+      0 12px 0 #404040,
+      0 16px 0 #171717,
+      0 20px 18px rgba(0, 0, 0, .72);
+}
+
+.logo-main::before {
+    content: '';
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    top: 20%;
+    height: 5px;
+    opacity: .2;
+    background: repeating-linear-gradient(90deg, #fff 0 12px, transparent 12px 28px);
+}
+
+.logo-edition {
+    position: absolute;
+    left: 50%;
+    bottom: clamp(-42px, -5vw, -30px);
+    transform: translateX(-50%);
+    width: max-content;
+    padding: 4px 18px 5px;
+    letter-spacing: .32em;
+    font-family: monospace;
+    font-size: clamp(.78rem, 2.1vw, 1.18rem);
+    color: #e9e9e9;
+    background: #303030;
+    border: 2px solid #111;
+    box-shadow: inset 0 2px #5f5f5f, 0 3px 0 #111;
 }
 
 .menu-splash {
-    display: inline-block;
-    margin: 0 0 12px;
-    padding: 2px 8px;
-    font-size: 1.05rem;
-    font-weight: 800;
-    color: #ffe062;
-    text-shadow: 1px 1px 0 #6b4d00;
-    transform: rotate(-11deg);
-    animation: splash-pop 1.2s ease-in-out infinite alternate;
+    position: absolute;
+    right: clamp(-24px, 2vw, 42px);
+    bottom: clamp(-72px, -7vw, -50px);
+    width: max-content;
+    color: #ffff00;
+    font-family: 'Trebuchet MS', 'Noto Sans TC', sans-serif;
+    font-size: clamp(.86rem, 2.35vw, 1.42rem);
+    font-weight: 900;
+    text-shadow: 2px 2px 0 #3f3f00;
+    transform: rotate(-18deg);
+    animation: splash-pop .7s ease-in-out infinite alternate;
 }
 
 @keyframes splash-pop {
-    from { transform: rotate(-11deg) scale(1); }
-    to { transform: rotate(-11deg) scale(1.12); }
+    from { transform: rotate(-18deg) scale(.96); }
+    to { transform: rotate(-18deg) scale(1.04); }
 }
 
 .menu-actions {
     display: grid;
     gap: 10px;
-    width: min(100%, 360px);
+    width: min(100%, 520px);
     margin: 0 auto;
 }
 
-#btn-play {
-    padding: 12px 20px;
-    font-size: 1.2rem;
-    font-weight: 700;
-    cursor: pointer;
-    background: linear-gradient(#7cc857, #4d932f);
+#btn-play,
+.menu-button-placeholder {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 18px 10px;
+    border: 2px solid var(--mc-black);
+    outline: 2px solid rgba(255, 255, 255, .48);
+    background: linear-gradient(var(--mc-button-top), var(--mc-button-bottom));
     color: #fff;
-    border: 2px solid #0f2f04;
-    box-shadow: inset 0 1px #b4eb92, inset 0 -2px #2e5f1c;
-    transition: transform .06s ease, filter .18s ease;
+    font: 700 1.05rem 'Noto Sans TC', sans-serif;
+    letter-spacing: .06em;
+    text-shadow: 2px 2px 0 #353535;
+    box-shadow:
+      inset 2px 2px 0 var(--mc-button-highlight),
+      inset -2px -3px 0 var(--mc-button-shadow),
+      0 4px 12px rgba(0, 0, 0, .35);
 }
 
-#btn-play:hover { filter: brightness(1.1); }
-#btn-play:active { transform: translateY(1px); }
+#btn-play {
+    cursor: pointer;
+    transition: filter .08s ease, color .08s ease;
+}
+
+#btn-play:hover,
+#btn-play:focus-visible {
+    color: #ffffa0;
+    background: linear-gradient(#829969, #5f7550);
+    outline-color: #fff;
+}
+
+#btn-play:active {
+    padding-top: 10px;
+    padding-bottom: 8px;
+    box-shadow: inset 2px 3px 0 #536349, inset -2px -1px 0 #a9bb98;
+}
+
+.menu-secondary-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    opacity: .62;
+}
+
+.menu-button-placeholder {
+    min-height: 42px;
+    font-size: .88rem;
+    filter: saturate(.25);
+}
 
 .menu-controls {
-    margin-top: 14px;
-    line-height: 1.65;
-    color: #d8d8d8;
-    font-size: .9rem;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 9px 18px;
+    margin: 22px auto 0;
+    color: rgba(255, 255, 255, .9);
+    font-size: clamp(.7rem, 1.8vw, .83rem);
+    line-height: 1.8;
+    text-shadow: 2px 2px 2px #000;
+}
+
+.menu-controls span { white-space: nowrap; }
+
+.menu-controls kbd {
+    display: inline-block;
+    min-width: 22px;
+    margin-right: 2px;
+    padding: 0 5px;
+    border: 1px solid rgba(255, 255, 255, .72);
+    border-radius: 2px;
+    background: rgba(0, 0, 0, .55);
+    color: #fff;
+    font: inherit;
+    line-height: 1.55;
+    box-shadow: 0 2px 0 rgba(0, 0, 0, .75);
 }
 
 .menu-footer {
-    margin-top: 12px;
-    font-size: .78rem;
-    color: #9a9a9a;
+    position: absolute;
+    right: 18px;
+    bottom: 12px;
+    left: 18px;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    color: rgba(255, 255, 255, .88);
+    font-size: clamp(.65rem, 1.7vw, .78rem);
+    text-shadow: 2px 2px 1px #000;
+}
+
+@media (max-width: 620px) {
+    #menu { margin-top: 8vh; padding-inline: 14px; }
+    .logo-main { font-size: clamp(3rem, 15vw, 4.2rem); }
+    .menu-logo { margin-bottom: 68px; }
+    .menu-splash { right: 0; bottom: -66px; }
+    .menu-secondary-actions { display: none; }
+    .menu-controls { margin-top: 18px; gap: 7px 12px; }
+    .menu-footer { right: 10px; bottom: 8px; left: 10px; }
+}
+
+@media (max-height: 620px) {
+    #menu { margin-top: 5vh; }
+    .menu-logo { margin-bottom: 52px; }
+    .logo-main { font-size: clamp(3.4rem, 15vh, 6rem); }
+    .menu-actions { gap: 7px; }
+    #btn-play, .menu-button-placeholder { min-height: 38px; }
+    .menu-controls { margin-top: 13px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .menu-splash { animation: none; }
 }
 
 #hotbar { border-radius: 0 !important; }
