@@ -125,7 +125,13 @@ export function getMaterials(type) {
     if (materialCache.has(type)) return materialCache.get(type);
 
     let materials;
-    if (type === 'stone') {
+    if (['raw_pork', 'raw_beef', 'raw_mutton', 'cooked_pork', 'cooked_beef', 'cooked_mutton'].includes(type)) {
+        const cooked = type.startsWith('cooked_');
+        const colors = cooked ? ['#9b4f2e', '#6f321f'] : ['#e18d87', '#b95659'];
+        const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture(colors[0], colors[1]) });
+        materials = [mat, mat, mat, mat, mat, mat];
+    }
+    else if (type === 'stone') {
         const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#888888', '#777777') });
         materials = [mat, mat, mat, mat, mat, mat];
     }
@@ -220,6 +226,21 @@ export function getItemIconCanvas(type) {
     const canvas = document.createElement('canvas');
     canvas.width = 16; canvas.height = 16;
     const ctx = canvas.getContext('2d');
+
+    if (['raw_pork', 'raw_beef', 'raw_mutton', 'cooked_pork', 'cooked_beef', 'cooked_mutton'].includes(type)) {
+        const cooked = type.startsWith('cooked_');
+        const light = cooked ? '#b76538' : '#f3a09b';
+        const dark = cooked ? '#6f321f' : '#a94148';
+        ctx.fillStyle = dark;
+        ctx.fillRect(3, 5, 10, 7);
+        ctx.fillRect(5, 3, 7, 11);
+        ctx.fillStyle = light;
+        ctx.fillRect(5, 4, 6, 7);
+        ctx.fillRect(4, 6, 8, 4);
+        ctx.fillStyle = '#f1d6bb';
+        ctx.fillRect(11, 8, 3, 2);
+        return canvas;
+    }
 
     if (type === 'furnace') {
         ctx.fillStyle = '#666666'; ctx.fillRect(0, 0, 16, 16);
@@ -355,5 +376,11 @@ export const blockIconColors = {
     iron_helmet: ['#c8c8c8', '#9f9f9f'],
     iron_chest: ['#c8c8c8', '#9f9f9f'],
     iron_legs: ['#c8c8c8', '#9f9f9f'],
-    iron_boots: ['#c8c8c8', '#9f9f9f']
+    iron_boots: ['#c8c8c8', '#9f9f9f'],
+    raw_pork: ['#f3a09b', '#a94148'],
+    raw_beef: ['#d87570', '#8f3238'],
+    raw_mutton: ['#e6aaa0', '#a44d4d'],
+    cooked_pork: ['#b76538', '#6f321f'],
+    cooked_beef: ['#98502f', '#59271b'],
+    cooked_mutton: ['#ad5a35', '#692d1d']
 };
