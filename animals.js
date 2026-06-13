@@ -90,6 +90,40 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
         });
     }
 
+    function chooseTerrainAwareDirection(mob) {
+        const nearby = getNearbyBlocks(mob.position.x, mob.position.z, 3);
+        const currentProbeY = mob.position.y + 1.6;
+        const currentGround = getGroundAt(mob.position.x, mob.position.z, nearby, 0.36, currentProbeY);
+        let bestDirection = mob.userData.direction.clone();
+        let bestScore = Infinity;
+
+        for (let i = 0; i < 8; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const candidate = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
+            const probeX = mob.position.x + candidate.x * 0.9;
+            const probeZ = mob.position.z + candidate.z * 0.9;
+            const probeBlocks = getNearbyBlocks(probeX, probeZ, 3);
+            const ground = getGroundAt(probeX, probeZ, probeBlocks, 0.36, currentProbeY);
+            if (ground === -999 || currentGround === -999) continue;
+
+            const heightDiff = ground - currentGround;
+            const blocked = checkWall(probeX, mob.position.y + 1.2, probeZ, probeBlocks, 0.36);
+            if (blocked && heightDiff <= 0.55) continue;
+            if (heightDiff > 1.25 || heightDiff < -1.1) continue;
+
+            // Prefer level ground and gentle climbs over continually walking downhill.
+            const downhillPenalty = heightDiff < -0.15 ? Math.abs(heightDiff) * 1.8 : 0;
+            const steepPenalty = Math.abs(heightDiff) * 0.55;
+            const continuityBonus = candidate.dot(mob.userData.direction) * 0.18;
+            const score = downhillPenalty + steepPenalty - continuityBonus + Math.random() * 0.2;
+            if (score < bestScore) {
+                bestScore = score;
+                bestDirection = candidate;
+            }
+        }
+        return bestDirection.normalize();
+    }
+
     function trySpawnAt(rx, rz) {
         const cell = animalCellKey(rx, rz);
         if (spawnedAnimalCells.has(cell)) return false;
@@ -186,8 +220,8 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
             data.blockedTurnCooldown = Math.max(0, (data.blockedTurnCooldown || 0) - dt);
             if (data.turnTimer <= 0) {
                 data.turnTimer = 1 + Math.random() * 3;
-                const jitter = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
-                data.direction.lerp(jitter, 0.65).normalize();
+                const terrainDirection = chooseTerrainAwareDirection(mob);
+                data.direction.lerp(terrainDirection, 0.72).normalize();
             }
 
             const stepX = data.direction.x * data.walkSpeed * dt;
@@ -196,31 +230,30 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
             const nextZ = mob.position.z + stepZ;
             const nearby = getNearbyBlocks(mob.position.x, mob.position.z, 3);
 
-            const currentFeetY = mob.position.y + 0.15;
-            const currentGround = getGroundAt(mob.position.x, mob.position.z, nearby, 0.36, currentFeetY);
-            const nextGround = getGroundAt(nextX, nextZ, nearby, 0.36, currentFeetY);
+            const groundProbeY = mob.position.y + 1.6;
+            const currentGround = getGroundAt(mob.position.x, mob.position.z, nearby, 0.36, groundProbeY);
+            const nextGround = getGroundAt(nextX, nextZ, nearby, 0.36, groundProbeY);
 
             const blockedX = checkWall(nextX, mob.position.y + 1.2, mob.position.z, nearby, 0.36);
             const blockedZ = checkWall(mob.position.x, mob.position.y + 1.2, nextZ, nearby, 0.36);
             const dropTooHigh = currentGround !== -999 && nextGround !== -999 && (currentGround - nextGround) > 1.1;
-            const stepUpTooHigh = currentGround !== -999 && nextGround !== -999 && (nextGround - currentGround) > 1.05;
-            const canJumpUp = currentGround !== -999 && nextGround !== -999 && (nextGround - currentGround) > 1.05 && (nextGround - currentGround) <= 1.35;
+            const stepUpTooHigh = currentGround !== -999 && nextGround !== -999 && (nextGround - currentGround) > 0.55;
+            const canJumpUp = currentGround !== -999 && nextGround !== -999 && (nextGround - currentGround) > 0.55 && (nextGround - currentGround) <= 1.25;
             const voidAhead = currentGround !== -999 && nextGround === -999;
             const steepDropAhead = dropTooHigh || voidAhead || stepUpTooHigh;
+            const climbingStep = canJumpUp && data.velocityY > 0.01;
 
             let moved = false;
-            if (!blockedX && !steepDropAhead) {
+            if (!blockedX && (!steepDropAhead || climbingStep)) {
                 mob.position.x = nextX;
                 moved = true;
             }
-            if (!blockedZ && !steepDropAhead) {
+            if (!blockedZ && (!steepDropAhead || climbingStep)) {
                 mob.position.z = nextZ;
                 moved = true;
             }
             if (!moved && canJumpUp && data.velocityY <= 0.01) {
                 data.velocityY = 9.5;
-                mob.position.x += data.direction.x * 0.12;
-                mob.position.z += data.direction.z * 0.12;
                 moved = true;
             }
             if (moved && currentGround !== -999 && nextGround !== -999 && nextGround > currentGround) {
@@ -312,8 +345,19 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
         setAnimalDamageTint(mob, true);
         if (hitDirection?.lengthSq() > 0.0001) {
             const away = hitDirection.clone().setY(0).normalize();
-            mob.position.x += away.x * 0.8;
-            mob.position.z += away.z * 0.8;
+            const stepDistance = 0.1;
+            for (let step = 0; step < 8; step++) {
+                const targetX = mob.position.x + away.x * stepDistance;
+                const targetZ = mob.position.z + away.z * stepDistance;
+                const nearby = getNearbyBlocks(targetX, targetZ, 3);
+                const blocked = checkWall(targetX, mob.position.y + 1.2, targetZ, nearby, 0.36);
+                const currentGround = getGroundAt(mob.position.x, mob.position.z, nearby, 0.36, mob.position.y + 1.6);
+                const targetGround = getGroundAt(targetX, targetZ, nearby, 0.36, mob.position.y + 1.6);
+                const safeDrop = currentGround !== -999 && targetGround !== -999 && currentGround - targetGround <= 1.1;
+                if (blocked || !safeDrop) break;
+                mob.position.x = targetX;
+                mob.position.z = targetZ;
+            }
             mob.userData.direction.copy(away);
         }
         mob.userData.velocityY = Math.max(mob.userData.velocityY, 3.5);

@@ -811,11 +811,11 @@ function updateZombies(dt) {
         const d = z.userData;
         d.hitCooldown = Math.max(0, d.hitCooldown - dt);
         const toPlayer = new THREE.Vector3(camera.position.x - z.position.x, 0, camera.position.z - z.position.z);
-        const dist = toPlayer.length();
-        if (dist > 0.001) toPlayer.normalize();
+        const horizontalDist = toPlayer.length();
+        if (horizontalDist > 0.001) toPlayer.normalize();
         const speed = 1.8;
         const minPlayerGap = 1.05;
-        const chaseDist = Math.max(0, dist - minPlayerGap);
+        const chaseDist = Math.max(0, horizontalDist - minPlayerGap);
         const step = Math.min(chaseDist, speed * dt);
         const nx = z.position.x + toPlayer.x * step;
         const nz = z.position.z + toPlayer.z * step;
@@ -852,7 +852,15 @@ function updateZombies(dt) {
         d.arms[1].rotation.x = Math.sin(d.phase) * 0.35;
         z.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
 
-        if (dist < 1.4 && d.hitCooldown <= 0) {
+        const playerCenterY = camera.position.y - currentHeight * 0.5;
+        const zombieCenterY = z.position.y + 0.9;
+        const verticalDist = playerCenterY - zombieCenterY;
+        const attackDistance = Math.hypot(
+            camera.position.x - z.position.x,
+            verticalDist,
+            camera.position.z - z.position.z
+        );
+        if (attackDistance < 1.55 && d.hitCooldown <= 0) {
             d.hitCooldown = 0.9;
             damagePlayer(3, 'zombie');
             velocity.x += toPlayer.x * 11.5;
