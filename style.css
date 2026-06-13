@@ -367,6 +367,9 @@ body.damage-flash::after {
 .mc-furnace-area{display:none;}
 .furnace-slots{display:grid;grid-template-columns:42px 30px 42px;gap:8px;align-items:center;}
 .furnace-left{display:grid;grid-template-rows:42px 42px;gap:8px;}
+.furnace-slot{position:relative;overflow:hidden;}
+.furnace-slot .furnace-item-icon{left:7px;bottom:7px;width:28px;height:28px;}
+.furnace-item-count{position:absolute;right:3px;bottom:1px;z-index:2;color:#fff;font-size:10px;font-family:monospace;text-shadow:1px 1px #222;pointer-events:none;}
 .mc-furnace-progress{width:30px;height:10px;border:1px solid #333;background:#4a4a4a;position:relative;}
 #furnace-progress-fill{position:absolute;left:0;top:0;height:100%;width:0%;background:#e2b86b;}
 
@@ -380,10 +383,10 @@ body.damage-flash::after {
 .equip-slot[data-equip="boots"]::after{content:"靴";}
 
 
-#first-person-hand{position:absolute;right:4vw;bottom:5vh;width:220px;height:220px;pointer-events:none;z-index:6;display:none;}
-.fp-arm{position:absolute;right:20px;bottom:8px;width:120px;height:48px;background:linear-gradient(#e8bc98,#ce9371);border:3px solid #5c4333;transform:rotate(-24deg);transform-origin:right bottom;border-radius:10px;transition:transform .12s ease,right .12s ease,bottom .12s ease;}
-#first-person-hand.has-item .fp-arm{right:8px;bottom:-2px;transform:rotate(-34deg);}
-.fp-held-item{position:absolute;right:88px;bottom:74px;width:62px;height:62px;background-size:cover;background-position:center;image-rendering:pixelated;transform:rotate(-32deg);filter:drop-shadow(0 3px 2px rgba(0,0,0,.55));display:none;}
+#first-person-hand{position:absolute;right:3vw;bottom:3vh;width:300px;height:270px;pointer-events:none;z-index:6;display:none;}
+.fp-arm{position:absolute;right:18px;bottom:4px;width:174px;height:54px;background:linear-gradient(#e8bc98,#ce9371);border:3px solid #5c4333;transform:rotate(-24deg);transform-origin:right bottom;border-radius:10px;transition:transform .12s ease,right .12s ease,bottom .12s ease;}
+#first-person-hand.has-item .fp-arm{right:4px;bottom:-8px;transform:rotate(-34deg);}
+.fp-held-item{position:absolute;right:126px;bottom:91px;width:84px;height:84px;background-size:cover;background-position:center;image-rendering:pixelated;transform:rotate(-32deg);filter:drop-shadow(0 4px 3px rgba(0,0,0,.6));display:none;}
 #first-person-hand.has-item .fp-held-item{display:block;}
 
 .avatar-model{position:relative;width:88px;height:138px;margin-bottom:4px;}

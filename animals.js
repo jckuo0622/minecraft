@@ -56,6 +56,7 @@ function createAnimal(animalType, x, y, z) {
         health: config.health,
         dropItemId: config.drop,
         hitCooldown: 0,
+        hitFlashTime: 0,
         velocityY: 0,
         direction: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(),
         turnTimer: 1 + Math.random() * 3,
@@ -75,6 +76,18 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
 
     function animalCellKey(x, z) {
         return `${Math.floor(x / 7)},${Math.floor(z / 7)}`;
+    }
+
+    function setAnimalDamageTint(mob, active) {
+        mob.traverse((part) => {
+            if (!part.isMesh) return;
+            const materials = Array.isArray(part.material) ? part.material : [part.material];
+            for (const material of materials) {
+                if (!material?.emissive) continue;
+                material.emissive.setHex(active ? 0xff1d1d : 0x000000);
+                material.emissiveIntensity = active ? 0.85 : 1;
+            }
+        });
     }
 
     function trySpawnAt(rx, rz) {
@@ -165,6 +178,10 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
             const mob = animals[i];
             const data = mob.userData;
             data.hitCooldown = Math.max(0, data.hitCooldown - dt);
+            if (data.hitFlashTime > 0) {
+                data.hitFlashTime = Math.max(0, data.hitFlashTime - dt);
+                if (data.hitFlashTime === 0) setAnimalDamageTint(mob, false);
+            }
             data.turnTimer -= dt;
             data.blockedTurnCooldown = Math.max(0, (data.blockedTurnCooldown || 0) - dt);
             if (data.turnTimer <= 0) {
@@ -291,6 +308,8 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
         if (!mob || !animals.includes(mob) || mob.userData.hitCooldown > 0) return false;
         mob.userData.health -= amount;
         mob.userData.hitCooldown = 0.25;
+        mob.userData.hitFlashTime = 0.18;
+        setAnimalDamageTint(mob, true);
         if (hitDirection?.lengthSq() > 0.0001) {
             const away = hitDirection.clone().setY(0).normalize();
             mob.position.x += away.x * 0.8;

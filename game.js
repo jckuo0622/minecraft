@@ -295,8 +295,16 @@ function smeltResult(itemId) {
 }
 
 function renderFurnaceSlot(el, slot) {
-    if (!slot) { el.innerHTML = ''; return; }
-    el.innerHTML = `<div class="mc-item-icon" style="background-image:url(${itemIconDataUrl[slot.itemId] || ''})"></div><span style="position:absolute;right:4px;bottom:2px;color:white;font-size:10px;">x${slot.count}</span>`;
+    if (!slot) {
+        el.innerHTML = '';
+        el.removeAttribute('title');
+        return;
+    }
+    el.innerHTML = `
+        <div class="mc-item-icon furnace-item-icon" style="background-image:url(${itemIconDataUrl[slot.itemId] || ''})"></div>
+        <span class="furnace-item-count">x${slot.count}</span>
+    `;
+    el.title = itemDefs[slot.itemId]?.nameZh || slot.itemId;
 }
 
 
