@@ -3,9 +3,9 @@ import { getPixelCanvas } from './textures.js';
 import { getGroundAt, checkWall } from './physics.js';
 
 const animalTypes = {
-    pig: { name: '豬', body: ['#f7a9b8', '#e892a4'], accent: '#d97b8e', spawnWeight: 0.4 },
-    cow: { name: '牛', body: ['#5b4638', '#463527'], accent: '#f4f0e8', spawnWeight: 0.3 },
-    sheep: { name: '羊', body: ['#efefef', '#d8d8d8'], accent: '#555555', spawnWeight: 0.3 }
+    pig: { name: '豬', body: ['#f7a9b8', '#e892a4'], accent: '#d97b8e', spawnWeight: 0.4, health: 5, drop: 'raw_pork' },
+    cow: { name: '牛', body: ['#5b4638', '#463527'], accent: '#f4f0e8', spawnWeight: 0.3, health: 7, drop: 'raw_beef' },
+    sheep: { name: '羊', body: ['#efefef', '#d8d8d8'], accent: '#555555', spawnWeight: 0.3, health: 5, drop: 'raw_mutton' }
 };
 
 function chooseAnimalType(x, z) {
@@ -53,6 +53,10 @@ function createAnimal(animalType, x, y, z) {
     mob.scale.setScalar(1.45);
     mob.userData = {
         animalType,
+        health: config.health,
+        dropItemId: config.drop,
+        hitCooldown: 0,
+        hitFlashTime: 0,
         velocityY: 0,
         direction: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(),
         turnTimer: 1 + Math.random() * 3,
@@ -66,12 +70,24 @@ function createAnimal(animalType, x, y, z) {
     return mob;
 }
 
-export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceHeightApprox }) {
+export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceHeightApprox, onAnimalDeath }) {
     const animals = [];
     const spawnedAnimalCells = new Set();
 
     function animalCellKey(x, z) {
         return `${Math.floor(x / 7)},${Math.floor(z / 7)}`;
+    }
+
+    function setAnimalDamageTint(mob, active) {
+        mob.traverse((part) => {
+            if (!part.isMesh) return;
+            const materials = Array.isArray(part.material) ? part.material : [part.material];
+            for (const material of materials) {
+                if (!material?.emissive) continue;
+                material.emissive.setHex(active ? 0xff1d1d : 0x000000);
+                material.emissiveIntensity = active ? 0.85 : 1;
+            }
+        });
     }
 
     function trySpawnAt(rx, rz) {
@@ -161,6 +177,11 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
         for (let i = animals.length - 1; i >= 0; i--) {
             const mob = animals[i];
             const data = mob.userData;
+            data.hitCooldown = Math.max(0, data.hitCooldown - dt);
+            if (data.hitFlashTime > 0) {
+                data.hitFlashTime = Math.max(0, data.hitFlashTime - dt);
+                if (data.hitFlashTime === 0) setAnimalDamageTint(mob, false);
+            }
             data.turnTimer -= dt;
             data.blockedTurnCooldown = Math.max(0, (data.blockedTurnCooldown || 0) - dt);
             if (data.turnTimer <= 0) {
@@ -283,5 +304,33 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
         }
     }
 
-    return { spawnAnimalsNearPlayer, updateAnimals };
+    function damageAnimal(mob, amount, hitDirection) {
+        if (!mob || !animals.includes(mob) || mob.userData.hitCooldown > 0) return false;
+        mob.userData.health -= amount;
+        mob.userData.hitCooldown = 0.25;
+        mob.userData.hitFlashTime = 0.18;
+        setAnimalDamageTint(mob, true);
+        if (hitDirection?.lengthSq() > 0.0001) {
+            const away = hitDirection.clone().setY(0).normalize();
+            mob.position.x += away.x * 0.8;
+            mob.position.z += away.z * 0.8;
+            mob.userData.direction.copy(away);
+        }
+        mob.userData.velocityY = Math.max(mob.userData.velocityY, 3.5);
+        if (mob.userData.health > 0) return false;
+
+        const index = animals.indexOf(mob);
+        if (index >= 0) animals.splice(index, 1);
+        spawnedAnimalCells.delete(animalCellKey(mob.position.x, mob.position.z));
+        scene.remove(mob);
+        onAnimalDeath?.(mob.userData.dropItemId, mob.position.clone(), mob.userData.animalType);
+        return true;
+    }
+
+    return {
+        spawnAnimalsNearPlayer,
+        updateAnimals,
+        getAnimals: () => animals,
+        damageAnimal
+    };
 }
