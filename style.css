@@ -50,6 +50,28 @@ body {
     box-shadow: inset 0 -2px #999;
 }
 
+#eating-progress {
+    position: absolute;
+    top: calc(50% + 24px);
+    left: 50%;
+    z-index: 7;
+    display: none;
+    width: 104px;
+    height: 10px;
+    padding: 2px;
+    transform: translateX(-50%);
+    border: 2px solid #111;
+    background: rgba(20, 20, 20, .78);
+    pointer-events: none;
+}
+
+#eating-progress-fill {
+    width: 0;
+    height: 100%;
+    background: #d98a45;
+    box-shadow: inset 0 -2px #7a421f;
+}
+
 #survival-hud {
     position: absolute;
     bottom: 98px;

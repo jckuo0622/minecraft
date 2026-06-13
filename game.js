@@ -30,6 +30,12 @@ const itemDefs = {
     coal_ore: new BlockItem('coal_ore', '煤礦'),
     iron_ore: new BlockItem('iron_ore', '鐵礦'),
     iron: new BlockItem('iron', '鐵錠'),
+    raw_pork: new BlockItem('raw_pork', '生豬肉'),
+    raw_beef: new BlockItem('raw_beef', '生牛肉'),
+    raw_mutton: new BlockItem('raw_mutton', '生羊肉'),
+    cooked_pork: new BlockItem('cooked_pork', '熟豬肉'),
+    cooked_beef: new BlockItem('cooked_beef', '熟牛肉'),
+    cooked_mutton: new BlockItem('cooked_mutton', '熟羊肉'),
     wood_helmet: new BlockItem('wood_helmet', '木頭帽子'),
     wood_chest: new BlockItem('wood_chest', '木頭護甲'),
     wood_legs: new BlockItem('wood_legs', '木頭護腿'),
@@ -76,6 +82,8 @@ const healthBarEl = document.getElementById('health-bar');
 const hungerBarEl = document.getElementById('hunger-bar');
 const miningProgressEl = document.getElementById('mining-progress');
 const miningProgressFillEl = document.getElementById('mining-progress-fill');
+const eatingProgressEl = document.getElementById('eating-progress');
+const eatingProgressFillEl = document.getElementById('eating-progress-fill');
 
 let inventoryOpen = false;
 let craftingMode = 'inventory'; // inventory | table | furnace
@@ -102,6 +110,7 @@ let starvationTick = 0;
 let damageCooldown = 0;
 let wasAirborne = false;
 let peakFallSpeed = 0;
+let ignoreFallDamageUntilGround = true;
 
 const blockMiningRules = {
     leaf: { hardness: 0.25, tool: 'axe' },
@@ -120,6 +129,18 @@ const blockMiningRules = {
 let miningState = null;
 let leftMouseDown = false;
 let lastMiningSwingAt = 0;
+let eatingState = null;
+let rightMouseDown = false;
+let lastEatingSwingAt = 0;
+
+const foodValues = {
+    raw_pork: 3,
+    raw_beef: 3,
+    raw_mutton: 2,
+    cooked_pork: 8,
+    cooked_beef: 8,
+    cooked_mutton: 6
+};
 
 function renderStatusRow(container, value, iconClass) {
     container.innerHTML = '';
@@ -168,8 +189,12 @@ function respawnPlayer() {
     velocity.set(0, 0, 0);
     camera.position.set(0, 30, 0);
     playerAnchor.set(0, 30, 0);
+    ignoreFallDamageUntilGround = true;
+    wasAirborne = false;
+    peakFallSpeed = 0;
     miningState = null;
     miningProgressEl.style.display = 'none';
+    cancelEating();
     renderSurvivalHud();
 }
 
@@ -263,6 +288,9 @@ function fuelTime(itemId) {
 function smeltResult(itemId) {
     if (itemId === 'wood') return 'coal_ore';
     if (itemId === 'iron_ore') return 'iron';
+    if (itemId === 'raw_pork') return 'cooked_pork';
+    if (itemId === 'raw_beef') return 'cooked_beef';
+    if (itemId === 'raw_mutton') return 'cooked_mutton';
     return null;
 }
 
@@ -681,6 +709,10 @@ function toggleInventory(mode = 'inventory') {
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xbfd1e5);
 scene.fog = new THREE.FogExp2(0xbfd1e5, 0.03); 
+const DAY_DURATION = 10 * 60;
+const NIGHT_DURATION = 10 * 60;
+const DAY_NIGHT_CYCLE = DAY_DURATION + NIGHT_DURATION;
+let worldTime = 90;
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -708,7 +740,13 @@ const animalSystem = createAnimalSystem({
     scene,
     camera,
     getNearbyBlocks,
-    getSurfaceHeightApprox
+    getSurfaceHeightApprox,
+    onAnimalDeath: (itemId, position) => {
+        const amount = 1 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < amount; i++) {
+            dropSystem.spawnDrop(itemId, position.x, position.y + i * 0.08, position.z);
+        }
+    }
 });
 
 const zombies = [];
@@ -1083,7 +1121,9 @@ controls.addEventListener('lock', () => {
 });
 controls.addEventListener('unlock', () => {
     leftMouseDown = false;
+    rightMouseDown = false;
     cancelMining();
+    cancelEating();
     if (unlockingForInventory) {
         unlockingForInventory = false;
         overlay.style.display = 'none';
@@ -1171,8 +1211,18 @@ function getCenterRayHits() {
     const interactableBlocks = getNearbyBlocks(camera.position.x, camera.position.z, 5);
     return {
         blocks: raycaster.intersectObjects(interactableBlocks),
-        zombies: raycaster.intersectObjects(zombies, true)
+        zombies: raycaster.intersectObjects(zombies, true),
+        animals: raycaster.intersectObjects(animalSystem.getAnimals(), true)
     };
+}
+
+function findRootInCollection(object, collection) {
+    let current = object;
+    while (current) {
+        if (collection.includes(current)) return current;
+        current = current.parent;
+    }
+    return null;
 }
 
 function cancelMining() {
@@ -1217,6 +1267,10 @@ function updateMining(dt, now) {
         cancelMining();
         return;
     }
+    if (hits.animals.length > 0 && (!hits.blocks.length || hits.animals[0].distance < hits.blocks[0].distance)) {
+        cancelMining();
+        return;
+    }
     const target = hits.blocks[0]?.object;
     if (!target) {
         cancelMining();
@@ -1235,17 +1289,86 @@ function updateMining(dt, now) {
     if (progress >= 1) finishMining(target);
 }
 
+function cancelEating() {
+    eatingState = null;
+    eatingProgressFillEl.style.width = '0%';
+    eatingProgressEl.style.display = 'none';
+}
+
+function beginEating() {
+    const itemId = selectedItemId();
+    if (!foodValues[itemId] || playerHunger >= MAX_HUNGER) return false;
+    eatingState = { itemId, elapsed: 0, duration: 1.45 };
+    eatingProgressFillEl.style.width = '0%';
+    eatingProgressEl.style.display = 'block';
+    return true;
+}
+
+function finishEating() {
+    if (!eatingState) return;
+    const selectedSlot = inventory.getSlots(27, 36)[selectedIdx];
+    if (!selectedSlot || selectedSlot.itemId !== eatingState.itemId) {
+        cancelEating();
+        return;
+    }
+    const foodValue = foodValues[eatingState.itemId] || 0;
+    if (foodValue <= 0 || playerHunger >= MAX_HUNGER) {
+        cancelEating();
+        return;
+    }
+    inventory.remove(eatingState.itemId, 1);
+    playerHunger = Math.min(MAX_HUNGER, playerHunger + foodValue);
+    hungerExhaustion = Math.max(0, hungerExhaustion - 1);
+    renderSurvivalHud();
+    renderHotbar();
+    if (inventoryOpen) renderInventory();
+    cancelEating();
+}
+
+function updateEating(dt, now) {
+    if (!rightMouseDown || !controls.isLocked || inventoryOpen || !eatingState) {
+        cancelEating();
+        return;
+    }
+    if (selectedItemId() !== eatingState.itemId || playerHunger >= MAX_HUNGER) {
+        cancelEating();
+        return;
+    }
+    eatingState.elapsed += dt;
+    const progress = Math.min(1, eatingState.elapsed / eatingState.duration);
+    eatingProgressFillEl.style.width = `${progress * 100}%`;
+    if (now - lastEatingSwingAt > 220) {
+        lastEatingSwingAt = now;
+        playHandSwing();
+    }
+    if (progress >= 1) finishEating();
+}
+
 window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
     playHandSwing();
+    if (e.button === 2 && foodValues[selectedItemId()]) {
+        rightMouseDown = beginEating();
+        return;
+    }
     const hits = getCenterRayHits();
     const intersects = hits.blocks;
     const zombieHits = hits.zombies;
+    const animalHits = hits.animals;
     if (zombieHits.length > 0 && e.button === 0) {
-        if (intersects.length > 0 && intersects[0].distance < zombieHits[0].distance) {
+        const nearestAnimalDistance = animalHits[0]?.distance ?? Infinity;
+        if (intersects.length > 0 && intersects[0].distance < zombieHits[0].distance && intersects[0].distance < nearestAnimalDistance) {
             leftMouseDown = true;
             beginMining(intersects[0].object);
             return;
+        }
+        if (nearestAnimalDistance < zombieHits[0].distance) {
+            const animal = findRootInCollection(animalHits[0].object, animalSystem.getAnimals());
+            if (animal) {
+                const away = new THREE.Vector3(animal.position.x - camera.position.x, 0, animal.position.z - camera.position.z);
+                animalSystem.damageAnimal(animal, 1, away);
+                return;
+            }
         }
         const zombieRoot = zombieHits[0].object.parent;
         const target = zombies.find(z => z === zombieRoot || z.children.includes(zombieHits[0].object));
@@ -1262,6 +1385,22 @@ window.addEventListener('mousedown', (e) => {
                 zombies.splice(idx, 1);
             }
             return;
+        }
+    }
+    if (animalHits.length > 0 && e.button === 0) {
+        const nearestBlockDistance = intersects[0]?.distance ?? Infinity;
+        const nearestZombieDistance = zombieHits[0]?.distance ?? Infinity;
+        if (animalHits[0].distance < nearestBlockDistance && animalHits[0].distance < nearestZombieDistance) {
+            const animal = findRootInCollection(animalHits[0].object, animalSystem.getAnimals());
+            if (animal) {
+                const away = new THREE.Vector3(
+                    animal.position.x - camera.position.x,
+                    0,
+                    animal.position.z - camera.position.z
+                );
+                animalSystem.damageAnimal(animal, 1, away);
+                return;
+            }
         }
     }
     if (intersects.length > 0) {
@@ -1297,13 +1436,20 @@ window.addEventListener('mousedown', (e) => {
     }
 });
 window.addEventListener('mouseup', (e) => {
-    if (e.button !== 0) return;
-    leftMouseDown = false;
-    cancelMining();
+    if (e.button === 0) {
+        leftMouseDown = false;
+        cancelMining();
+    }
+    if (e.button === 2) {
+        rightMouseDown = false;
+        cancelEating();
+    }
 });
 window.addEventListener('blur', () => {
     leftMouseDown = false;
+    rightMouseDown = false;
     cancelMining();
+    cancelEating();
 });
 window.addEventListener('mousemove', (e) => {
     if (!controls.isLocked || !isThirdPerson) return;
@@ -1354,7 +1500,8 @@ function tickFurnaces(dt) {
 }
 
 // --- E. 燈光與遊戲循環 ---
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambientLight);
 const sun = new THREE.DirectionalLight(0xffffff, 0.6);
 sun.position.set(10, 20, 10);
 scene.add(sun);
@@ -1364,6 +1511,38 @@ const playerAnchor = new THREE.Vector3(0, 30, 0);
 const thirdPersonDistance = 4.2;
 const thirdPersonFrontDistance = 3.2;
 const playerFacingDir = new THREE.Vector3(0, 0, 1);
+const daySkyColor = new THREE.Color(0x79b9e8);
+const sunsetSkyColor = new THREE.Color(0xc98262);
+const nightSkyColor = new THREE.Color(0x071326);
+const blendedSkyColor = new THREE.Color();
+
+function updateDayNight(dt) {
+    worldTime = (worldTime + dt) % DAY_NIGHT_CYCLE;
+    const isDayHalf = worldTime < DAY_DURATION;
+    const halfProgress = isDayHalf
+        ? worldTime / DAY_DURATION
+        : (worldTime - DAY_DURATION) / NIGHT_DURATION;
+    const daylight = isDayHalf
+        ? Math.sin(halfProgress * Math.PI)
+        : 0;
+    const transition = isDayHalf
+        ? Math.min(1, daylight * 2.5)
+        : Math.max(0, Math.cos(halfProgress * Math.PI) * 0.18);
+    const horizonTint = isDayHalf ? Math.min(1, Math.abs(halfProgress - 0.5) * 2) : 0;
+
+    blendedSkyColor.copy(nightSkyColor).lerp(daySkyColor, transition);
+    if (isDayHalf && horizonTint > 0.72) {
+        blendedSkyColor.lerp(sunsetSkyColor, (horizonTint - 0.72) * 0.35);
+    }
+    scene.background.copy(blendedSkyColor);
+    scene.fog.color.copy(blendedSkyColor);
+    scene.fog.density = THREE.MathUtils.lerp(0.085, 0.022, transition);
+    ambientLight.intensity = THREE.MathUtils.lerp(0.14, 0.72, transition);
+    sun.intensity = THREE.MathUtils.lerp(0.05, 0.85, daylight);
+
+    const cycleAngle = (worldTime / DAY_NIGHT_CYCLE) * Math.PI * 2 - Math.PI / 2;
+    sun.position.set(Math.cos(cycleAngle) * 40, Math.sin(cycleAngle) * 45, 18);
+}
 
 function createPlayerModel() {
     const g = new THREE.Group();
@@ -1414,6 +1593,7 @@ function animate() {
     if (inventoryOpen && craftingMode === "furnace") renderFurnace();
 
     if (controls.isLocked) {
+        updateDayNight(dt);
         if (isThirdPerson) {
             camera.position.set(playerAnchor.x, playerAnchor.y + currentHeight, playerAnchor.z);
         }
@@ -1425,6 +1605,7 @@ function animate() {
         animalSystem.updateAnimals(dt);
         updateZombies(dt);
         updateMining(dt, t);
+        updateEating(dt, t);
 
         const targetH = isCrouching ? 1.2 : 1.8;
         currentHeight += (targetH - currentHeight) * 0.2;
@@ -1477,11 +1658,12 @@ function animate() {
             camera.position.y = Math.floor(camera.position.y) - 0.01;
         }
         if (groundH !== -999 && camera.position.y - currentHeight <= groundH) {
-            if (wasAirborne && peakFallSpeed > 13.5) {
+            if (!ignoreFallDamageUntilGround && wasAirborne && peakFallSpeed > 13.5) {
                 const fallDamage = Math.floor((peakFallSpeed - 11.5) / 2);
                 damagePlayer(fallDamage, 'fall');
             }
             velocity.y = 0; camera.position.y = groundH + currentHeight; canJump = true;
+            ignoreFallDamageUntilGround = false;
             wasAirborne = false;
             peakFallSpeed = 0;
         } else if (groundH !== -999) {
