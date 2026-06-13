@@ -71,6 +71,11 @@ const furnaceOutputEl = document.getElementById('furnace-output');
 const furnaceProgressFillEl = document.getElementById('furnace-progress-fill');
 const fpHandEl = document.getElementById('first-person-hand');
 const fpHeldItemEl = document.getElementById('fp-held-item');
+const survivalHudEl = document.getElementById('survival-hud');
+const healthBarEl = document.getElementById('health-bar');
+const hungerBarEl = document.getElementById('hunger-bar');
+const miningProgressEl = document.getElementById('mining-progress');
+const miningProgressFillEl = document.getElementById('mining-progress-fill');
 
 let inventoryOpen = false;
 let craftingMode = 'inventory'; // inventory | table | furnace
@@ -85,6 +90,145 @@ let isThirdPerson = false;
 let lastViewToggleAt = 0;
 let thirdPersonYaw = 0;
 let thirdPersonPitch = -0.2;
+
+const MAX_HEALTH = 20;
+const MAX_HUNGER = 20;
+let playerHealth = MAX_HEALTH;
+let playerHunger = MAX_HUNGER;
+let hungerExhaustion = 0;
+let survivalTick = 0;
+let regenerationTick = 0;
+let starvationTick = 0;
+let damageCooldown = 0;
+let wasAirborne = false;
+let peakFallSpeed = 0;
+
+const blockMiningRules = {
+    leaf: { hardness: 0.25, tool: 'axe' },
+    sand: { hardness: 0.4, tool: 'shovel' },
+    grass: { hardness: 0.65, tool: 'shovel' },
+    wood: { hardness: 1.5, tool: 'axe' },
+    plank: { hardness: 1.2, tool: 'axe' },
+    crafting_table: { hardness: 1.8, tool: 'axe' },
+    stone: { hardness: 2.8, tool: 'pickaxe' },
+    sandstone: { hardness: 2.2, tool: 'pickaxe' },
+    coal_ore: { hardness: 3.2, tool: 'pickaxe' },
+    iron_ore: { hardness: 4.2, tool: 'pickaxe' },
+    furnace: { hardness: 3.5, tool: 'pickaxe' }
+};
+
+let miningState = null;
+let leftMouseDown = false;
+let lastMiningSwingAt = 0;
+
+function renderStatusRow(container, value, iconClass) {
+    container.innerHTML = '';
+    for (let i = 0; i < 10; i++) {
+        const icon = document.createElement('span');
+        const remaining = value - i * 2;
+        icon.className = `status-icon ${iconClass}`;
+        if (remaining <= 0) icon.classList.add('empty');
+        else if (remaining === 1) icon.classList.add('half');
+        container.appendChild(icon);
+    }
+}
+
+function renderSurvivalHud() {
+    renderStatusRow(healthBarEl, playerHealth, 'health-icon');
+    renderStatusRow(hungerBarEl, playerHunger, 'hunger-icon');
+    healthBarEl.setAttribute('aria-label', `生命值 ${playerHealth} / ${MAX_HEALTH}`);
+    hungerBarEl.setAttribute('aria-label', `飢餓值 ${playerHunger} / ${MAX_HUNGER}`);
+}
+
+function armorPoints() {
+    const values = {
+        wood_helmet: 1, wood_chest: 2, wood_legs: 2, wood_boots: 1,
+        iron_helmet: 2, iron_chest: 5, iron_legs: 4, iron_boots: 2
+    };
+    return Object.values(equipment).reduce((sum, item) => sum + (values[item?.itemId] || 0), 0);
+}
+
+function damagePlayer(amount, source = 'generic', ignoreArmor = false) {
+    if (amount <= 0 || playerHealth <= 0 || damageCooldown > 0) return;
+    const reduction = ignoreArmor ? 0 : Math.min(0.6, armorPoints() * 0.04);
+    const damage = Math.max(1, Math.ceil(amount * (1 - reduction)));
+    playerHealth = Math.max(0, playerHealth - damage);
+    damageCooldown = source === 'starvation' ? 0.35 : 0.65;
+    renderSurvivalHud();
+    document.body.classList.remove('damage-flash');
+    void document.body.offsetWidth;
+    document.body.classList.add('damage-flash');
+    if (playerHealth <= 0) respawnPlayer();
+}
+
+function respawnPlayer() {
+    playerHealth = MAX_HEALTH;
+    playerHunger = MAX_HUNGER;
+    hungerExhaustion = 0;
+    velocity.set(0, 0, 0);
+    camera.position.set(0, 30, 0);
+    playerAnchor.set(0, 30, 0);
+    miningState = null;
+    miningProgressEl.style.display = 'none';
+    renderSurvivalHud();
+}
+
+function addExhaustion(amount) {
+    hungerExhaustion += amount;
+    while (hungerExhaustion >= 4 && playerHunger > 0) {
+        hungerExhaustion -= 4;
+        playerHunger--;
+        renderSurvivalHud();
+    }
+}
+
+function updateSurvival(dt, horizontalSpeed) {
+    damageCooldown = Math.max(0, damageCooldown - dt);
+    survivalTick += dt;
+    addExhaustion(dt * 0.015 + horizontalSpeed * dt * (isCrouching ? 0.003 : 0.007));
+
+    if (playerHunger >= 18 && playerHealth < MAX_HEALTH) {
+        regenerationTick += dt;
+        if (regenerationTick >= 4) {
+            regenerationTick = 0;
+            playerHealth++;
+            addExhaustion(1.5);
+            renderSurvivalHud();
+        }
+    } else {
+        regenerationTick = 0;
+    }
+
+    if (playerHunger <= 0) {
+        starvationTick += dt;
+        if (starvationTick >= 4) {
+            starvationTick = 0;
+            damagePlayer(1, 'starvation', true);
+        }
+    } else {
+        starvationTick = 0;
+    }
+
+    if (survivalTick >= 30) {
+        survivalTick = 0;
+        addExhaustion(0.25);
+    }
+}
+
+function selectedItemId() {
+    return inventory.getSlots(27, 36)[selectedIdx]?.itemId || null;
+}
+
+function miningDuration(blockType) {
+    const rule = blockMiningRules[blockType] || { hardness: 2, tool: null };
+    const itemId = selectedItemId() || '';
+    const toolType = itemId.includes('pickaxe') ? 'pickaxe' : itemId.includes('axe') ? 'axe' : null;
+    const tier = itemId.startsWith('iron_') ? 3 : itemId.startsWith('stone_') ? 2 : itemId.startsWith('wood_') ? 1 : 0;
+    let speed = 1;
+    if (rule.tool && toolType === rule.tool) speed = 2.2 + tier * 1.35;
+    else if (toolType) speed = 0.8;
+    return Math.max(0.18, rule.hardness * 0.75 / speed);
+}
 
 
 function setCraftMode(mode) {
@@ -664,6 +808,7 @@ function updateZombies(dt) {
 
         if (dist < 1.4 && d.hitCooldown <= 0) {
             d.hitCooldown = 0.9;
+            damagePlayer(3, 'zombie');
             velocity.x += toPlayer.x * 11.5;
             velocity.z += toPlayer.z * 11.5;
             velocity.y += 5.2;
@@ -924,6 +1069,7 @@ renderHotbar();
 renderEquipment();
 updateSelection(0);
 renderHeldItemInHand();
+renderSurvivalHud();
 
 // --- D. 控制與點擊 ---
 document.getElementById('btn-play').addEventListener('click', () => controls.lock());
@@ -931,21 +1077,26 @@ controls.addEventListener('lock', () => {
     overlay.style.display = 'none';
     crosshair.style.display = inventoryOpen ? 'none' : 'block';
     hotbar.style.display = 'flex';
+    survivalHudEl.style.display = 'flex';
     fpHandEl.style.display = (inventoryOpen || isThirdPerson) ? 'none' : 'block';
     playerModel.visible = isThirdPerson;
 });
 controls.addEventListener('unlock', () => {
+    leftMouseDown = false;
+    cancelMining();
     if (unlockingForInventory) {
         unlockingForInventory = false;
         overlay.style.display = 'none';
         crosshair.style.display = 'none';
         hotbar.style.display = 'flex';
+        survivalHudEl.style.display = 'flex';
         fpHandEl.style.display = 'none';
         return;
     }
     overlay.style.display = 'flex';
     crosshair.style.display = 'none';
     hotbar.style.display = 'none';
+    survivalHudEl.style.display = 'none';
     fpHandEl.style.display = 'none';
     playerModel.visible = false;
 });
@@ -995,7 +1146,11 @@ document.addEventListener('keydown', (e) => {
         const feetY = isThirdPerson ? playerAnchor.y : (camera.position.y - currentHeight);
         const near = getNearbyBlocks(px, pz, 2);
         const blockedHead = checkCapsuleWall(px, feetY + 0.05, pz, near, playerRadius, currentHeight + 0.2);
-        if (!blockedHead) { velocity.y += 9.5; canJump = false; }
+        if (!blockedHead) {
+            velocity.y += 9.5;
+            canJump = false;
+            addExhaustion(0.35);
+        }
     }
     if (e.shiftKey) isCrouching = true;
 });
@@ -1009,15 +1164,89 @@ window.addEventListener('wheel', (e) => {
     updateSelection(selectedIdx);
 }, { passive: true });
 
+function getCenterRayHits() {
+    const raycaster = new THREE.Raycaster();
+    raycaster.far = 5;
+    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+    const interactableBlocks = getNearbyBlocks(camera.position.x, camera.position.z, 5);
+    return {
+        blocks: raycaster.intersectObjects(interactableBlocks),
+        zombies: raycaster.intersectObjects(zombies, true)
+    };
+}
+
+function cancelMining() {
+    miningState = null;
+    miningProgressFillEl.style.width = '0%';
+    miningProgressEl.style.display = 'none';
+}
+
+function beginMining(mesh) {
+    miningState = {
+        mesh,
+        key: posKey(Math.round(mesh.position.x), Math.round(mesh.position.y), Math.round(mesh.position.z)),
+        elapsed: 0,
+        duration: miningDuration(mesh.userData.blockType || 'stone')
+    };
+    miningProgressFillEl.style.width = '0%';
+    miningProgressEl.style.display = 'block';
+}
+
+function finishMining(mesh) {
+    if (!mesh || !blocks.includes(mesh)) {
+        cancelMining();
+        return;
+    }
+    const pos = mesh.position.clone();
+    const blockType = mesh.userData.blockType || 'stone';
+    removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
+    dropSystem.spawnDrop(blockType, pos.x, pos.y, pos.z);
+    removeBlockMesh(mesh);
+    updateNeighbors(pos.x, pos.y, pos.z);
+    addExhaustion(0.08);
+    cancelMining();
+}
+
+function updateMining(dt, now) {
+    if (!leftMouseDown || !controls.isLocked || inventoryOpen) {
+        cancelMining();
+        return;
+    }
+    const hits = getCenterRayHits();
+    if (hits.zombies.length > 0 && (!hits.blocks.length || hits.zombies[0].distance < hits.blocks[0].distance)) {
+        cancelMining();
+        return;
+    }
+    const target = hits.blocks[0]?.object;
+    if (!target) {
+        cancelMining();
+        return;
+    }
+    const key = posKey(Math.round(target.position.x), Math.round(target.position.y), Math.round(target.position.z));
+    if (!miningState || miningState.key !== key) beginMining(target);
+    miningState.elapsed += dt;
+    miningState.duration = miningDuration(target.userData.blockType || 'stone');
+    const progress = Math.min(1, miningState.elapsed / miningState.duration);
+    miningProgressFillEl.style.width = `${progress * 100}%`;
+    if (now - lastMiningSwingAt > 260) {
+        lastMiningSwingAt = now;
+        playHandSwing();
+    }
+    if (progress >= 1) finishMining(target);
+}
+
 window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
     playHandSwing();
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-    const interactableBlocks = getNearbyBlocks(camera.position.x, camera.position.z, 4);
-    const intersects = raycaster.intersectObjects(interactableBlocks);
-    const zombieHits = raycaster.intersectObjects(zombies, true);
+    const hits = getCenterRayHits();
+    const intersects = hits.blocks;
+    const zombieHits = hits.zombies;
     if (zombieHits.length > 0 && e.button === 0) {
+        if (intersects.length > 0 && intersects[0].distance < zombieHits[0].distance) {
+            leftMouseDown = true;
+            beginMining(intersects[0].object);
+            return;
+        }
         const zombieRoot = zombieHits[0].object.parent;
         const target = zombies.find(z => z === zombieRoot || z.children.includes(zombieHits[0].object));
         if (target) {
@@ -1039,11 +1268,8 @@ window.addEventListener('mousedown', (e) => {
         const intersect = intersects[0];
         const pos = intersect.object.position.clone();
         if (e.button === 0) { // 挖掘
-            removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
-            const blockType = intersect.object.userData.blockType || 'stone';
-            dropSystem.spawnDrop(blockType, pos.x, pos.y, pos.z);
-            removeBlockMesh(intersect.object);
-            updateNeighbors(pos.x, pos.y, pos.z);
+            leftMouseDown = true;
+            beginMining(intersect.object);
         } else if (e.button === 2) { // 建造/使用
             if (intersect.object.userData.blockType === 'crafting_table') {
                 toggleInventory('table');
@@ -1069,6 +1295,15 @@ window.addEventListener('mousedown', (e) => {
             addBlockMesh(b);
         }
     }
+});
+window.addEventListener('mouseup', (e) => {
+    if (e.button !== 0) return;
+    leftMouseDown = false;
+    cancelMining();
+});
+window.addEventListener('blur', () => {
+    leftMouseDown = false;
+    cancelMining();
 });
 window.addEventListener('mousemove', (e) => {
     if (!controls.isLocked || !isThirdPerson) return;
@@ -1189,6 +1424,7 @@ function animate() {
         animalSystem.spawnAnimalsNearPlayer();
         animalSystem.updateAnimals(dt);
         updateZombies(dt);
+        updateMining(dt, t);
 
         const targetH = isCrouching ? 1.2 : 1.8;
         currentHeight += (targetH - currentHeight) * 0.2;
@@ -1241,9 +1477,21 @@ function animate() {
             camera.position.y = Math.floor(camera.position.y) - 0.01;
         }
         if (groundH !== -999 && camera.position.y - currentHeight <= groundH) {
+            if (wasAirborne && peakFallSpeed > 13.5) {
+                const fallDamage = Math.floor((peakFallSpeed - 11.5) / 2);
+                damagePlayer(fallDamage, 'fall');
+            }
             velocity.y = 0; camera.position.y = groundH + currentHeight; canJump = true;
-        } else if (groundH !== -999) { canJump = false; }
-        if (camera.position.y < -30) camera.position.set(0, 30, 0);
+            wasAirborne = false;
+            peakFallSpeed = 0;
+        } else if (groundH !== -999) {
+            canJump = false;
+            wasAirborne = true;
+            if (velocity.y < 0) peakFallSpeed = Math.max(peakFallSpeed, -velocity.y);
+        }
+        if (camera.position.y < -30) {
+            damagePlayer(MAX_HEALTH, 'void', true);
+        }
 
         playerAnchor.set(camera.position.x, camera.position.y - currentHeight, camera.position.z);
         const viewDir = isThirdPerson
@@ -1254,6 +1502,7 @@ function animate() {
 
         const pdata = playerModel.userData;
         const horizontalSpeed = Math.hypot(velocity.x, velocity.z);
+        updateSurvival(dt, horizontalSpeed);
         pdata.walkPhase += dt * Math.min(10, horizontalSpeed * 0.45 + 2.5);
         const swing = horizontalSpeed > 0.2 ? Math.sin(pdata.walkPhase) * 0.65 : 0;
         pdata.legL.rotation.x = swing;

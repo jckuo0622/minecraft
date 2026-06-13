@@ -28,6 +28,94 @@ body {
     z-index: 5;
 }
 
+#mining-progress {
+    position: absolute;
+    top: calc(50% + 24px);
+    left: 50%;
+    z-index: 7;
+    display: none;
+    width: 104px;
+    height: 10px;
+    padding: 2px;
+    transform: translateX(-50%);
+    border: 2px solid #111;
+    background: rgba(20, 20, 20, .78);
+    pointer-events: none;
+}
+
+#mining-progress-fill {
+    width: 0;
+    height: 100%;
+    background: #eee;
+    box-shadow: inset 0 -2px #999;
+}
+
+#survival-hud {
+    position: absolute;
+    bottom: 98px;
+    left: 50%;
+    z-index: 7;
+    display: none;
+    width: 566px;
+    justify-content: space-between;
+    transform: translateX(-50%);
+    pointer-events: none;
+    image-rendering: pixelated;
+}
+
+.status-row {
+    display: flex;
+    gap: 2px;
+}
+
+.status-icon {
+    position: relative;
+    width: 23px;
+    height: 22px;
+    overflow: hidden;
+    filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, .8));
+}
+
+.status-icon::before,
+.status-icon::after {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 22px;
+    line-height: 1;
+}
+
+.health-icon::before { content: '♡'; color: #3d1111; }
+.health-icon::after { content: '♥'; color: #e33b36; }
+.hunger-icon::before { content: '◇'; color: #3b1c0d; font-size: 24px; }
+.hunger-icon::after {
+    content: '🍖';
+    font-size: 18px;
+    transform: rotate(-35deg);
+}
+
+.status-icon.empty::after { display: none; }
+.status-icon.half::after { clip-path: inset(0 50% 0 0); }
+
+body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: rgba(180, 0, 0, .38);
+    opacity: 0;
+    pointer-events: none;
+}
+
+body.damage-flash::after {
+    animation: damage-flash .28s steps(2, end) 2;
+}
+
+@keyframes damage-flash {
+    50% { opacity: 1; }
+}
+
 #overlay {
     position: absolute;
     inset: 0;
@@ -197,6 +285,11 @@ body {
     .menu-logo { margin-bottom: 68px; }
     .menu-secondary-actions { display: none; }
     .menu-footer { right: 10px; bottom: 8px; left: 10px; }
+    #survival-hud {
+        bottom: 90px;
+        width: min(94vw, 500px);
+        transform: translateX(-50%) scale(.86);
+    }
 }
 
 @media (max-height: 620px) {
