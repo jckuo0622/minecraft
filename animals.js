@@ -338,7 +338,7 @@ export function createAnimalSystem({ scene, camera, getNearbyBlocks, getSurfaceH
     }
 
     function damageAnimal(mob, amount, hitDirection) {
-        if (!mob || !animals.includes(mob) || (mob.userData.hitCooldown > 0 && amount < 999)) return false;
+        if (!mob || !animals.includes(mob) || mob.userData.hitCooldown > 0) return false;
         mob.userData.health -= amount;
         mob.userData.hitCooldown = 0.25;
         mob.userData.hitFlashTime = 0.18;
