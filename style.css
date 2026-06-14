@@ -260,7 +260,7 @@ body.damage-flash::after {
 }
 
 #btn-play,
-.menu-mode-button {
+.menu-secondary-button {
     min-height: 48px;
     display: flex;
     align-items: center;
@@ -279,47 +279,36 @@ body.damage-flash::after {
       0 4px 12px rgba(0, 0, 0, .35);
 }
 
-#btn-play,
-.menu-mode-button {
+#btn-play {
     cursor: pointer;
     transition: filter .08s ease, color .08s ease;
 }
 
 #btn-play:hover,
-#btn-play:focus-visible,
-.menu-mode-button:hover,
-.menu-mode-button:focus-visible {
+#btn-play:focus-visible {
     color: #ffffa0;
     background: linear-gradient(#829969, #5f7550);
     outline-color: #fff;
 }
 
-#btn-play:active,
-.menu-mode-button:active {
+#btn-play:active {
     padding-top: 10px;
     padding-bottom: 8px;
     box-shadow: inset 2px 3px 0 #536349, inset -2px -1px 0 #a9bb98;
 }
 
-.menu-mode-actions {
+.menu-secondary-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
 }
 
-.menu-mode-button {
+.menu-secondary-button {
     min-height: 42px;
     font-size: .88rem;
-}
-
-.menu-mode-button.selected {
-    color: #ffffa0;
-    background: linear-gradient(#829969, #5f7550);
-    outline-color: #fff;
-    box-shadow:
-      inset 2px 2px 0 #a9bb98,
-      inset -2px -3px 0 #536349,
-      0 4px 12px rgba(0, 0, 0, .35);
+    color: #a9a9a9;
+    cursor: not-allowed;
+    filter: brightness(.72);
 }
 
 .menu-footer {
@@ -339,7 +328,7 @@ body.damage-flash::after {
     #menu { margin-top: 8vh; padding-inline: 14px; }
     .logo-main { font-size: clamp(3rem, 15vw, 4.2rem); }
     .menu-logo { margin-bottom: 68px; }
-    .menu-mode-actions { gap: 7px; }
+    .menu-secondary-actions { gap: 7px; }
     .menu-footer { right: 10px; bottom: 8px; left: 10px; }
     #survival-hud {
         bottom: 90px;
@@ -353,7 +342,7 @@ body.damage-flash::after {
     .menu-logo { margin-bottom: 52px; }
     .logo-main { font-size: clamp(3.4rem, 15vh, 6rem); }
     .menu-actions { gap: 7px; }
-    #btn-play, .menu-mode-button { min-height: 38px; }
+    #btn-play, .menu-secondary-button { min-height: 38px; }
 }
 
 

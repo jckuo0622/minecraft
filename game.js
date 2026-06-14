@@ -87,8 +87,6 @@ const eatingProgressEl = document.getElementById('eating-progress');
 const eatingProgressFillEl = document.getElementById('eating-progress-fill');
 const throwProgressEl = document.getElementById('throw-progress');
 const throwProgressFillEl = document.getElementById('throw-progress-fill');
-const peacefulModeButton = document.getElementById('btn-mode-peaceful');
-const survivalModeButton = document.getElementById('btn-mode-survival');
 
 let inventoryOpen = false;
 let gameMode = 'survival';
@@ -1505,8 +1503,6 @@ renderHeldItemInHand();
 renderSurvivalHud();
 
 // --- D. 控制與點擊 ---
-peacefulModeButton?.addEventListener('click', () => setGameMode('peaceful'));
-survivalModeButton?.addEventListener('click', () => setGameMode('survival'));
 const playButton = document.getElementById('btn-play');
 playButton?.addEventListener('click', () => controls.lock());
 controls.addEventListener('lock', () => {
