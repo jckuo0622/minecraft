@@ -3,31 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js Minecraft Clone</title>
+    <title>Minecraft Web Edition</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="game-container"></div>
     <div id="crosshair">+</div>
+    <div id="mining-progress" aria-hidden="true">
+        <div id="mining-progress-fill"></div>
+    </div>
+    <div id="eating-progress" aria-hidden="true">
+        <div id="eating-progress-fill"></div>
+    </div>
+    <div id="throw-progress" aria-hidden="true">
+        <div id="throw-progress-fill"></div>
+    </div>
+    <div id="survival-hud" aria-label="玩家狀態">
+        <div id="health-bar" class="status-row" aria-label="生命值"></div>
+        <div id="hunger-bar" class="status-row" aria-label="飢餓值"></div>
+    </div>
     <div id="first-person-hand" aria-hidden="true">
         <div class="fp-arm"></div>
         <div class="fp-held-item" id="fp-held-item"></div>
     </div>
 
     <div id="overlay">
-        <div id="menu">
-            <div class="menu-logo">
-                <h1>MINECRAFT</h1>
-                <p class="menu-subtitle">我的世界網頁版 · Three.js Edition</p>
-            </div>
-            <div class="menu-splash">超讚像素生存！</div>
+        <main id="menu" aria-labelledby="game-title">
+            <header class="menu-logo">
+                <h1 id="game-title" aria-label="Minecraft">
+                    <span class="logo-main">MINECRAFT</span>
+                    <span class="logo-edition">WEB EDITION</span>
+                </h1>
+            </header>
+
             <div class="menu-actions">
-                <button id="btn-play">開始遊戲</button>
+                <button id="btn-play" type="button">開始遊戲</button>
+                <div class="menu-mode-actions" aria-label="遊戲模式">
+                    <button class="menu-mode-button" id="btn-mode-peaceful" type="button" aria-pressed="false">和平模式</button>
+                    <button class="menu-mode-button selected" id="btn-mode-survival" type="button" aria-pressed="true">生存模式</button>
+                </div>
             </div>
-            <p class="menu-controls">控制：W A S D 移動 | Space 跳躍 | Shift 潛行<br>
-               1~9 切換物品 | E 背包 | 左鍵挖掘 | 右鍵建造 / 使用</p>
-            <div class="menu-footer">Tip：開局先挖木頭，做出合成台與石斧！</div>
-        </div>
+
+        </main>
+
+        <footer class="menu-footer">
+            <span>Minecraft Web Edition 1.0</span>
+            <span>非官方 Three.js 致敬作品</span>
+        </footer>
     </div>
 
     <div id="inventory-panel" class="mc-inventory">
@@ -86,6 +108,6 @@
         </div>
     </div>
 
-    <script type="module" src="game.js"></script>
+    <script type="module" src="game.js?v=menu-start-4"></script>
 </body>
 </html>
