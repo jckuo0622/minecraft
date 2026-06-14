@@ -1139,6 +1139,16 @@ function flushChunkBuildQueue(maxChunksPerFrame = 1) {
             m.position.set(x, y, z);
             if (addBlockMesh(m)) chunkBlocks.push(m);
         }
+        const [cx, cz] = key.split(',').map(Number);
+        for (const [positionKey, blockType] of placedBlocks) {
+            const [x, y, z] = positionKey.split(',').map(Number);
+            if (Math.floor(x / CHUNK_SIZE) !== cx || Math.floor(z / CHUNK_SIZE) !== cz) continue;
+            const m = new THREE.Mesh(boxGeo, getMaterials(blockType));
+            m.userData.blockType = blockType;
+            m.userData.playerPlaced = true;
+            m.position.set(x, y, z);
+            if (addBlockMesh(m)) chunkBlocks.push(m);
+        }
         loadedChunks.set(key, chunkBlocks);
     }
 }
