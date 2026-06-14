@@ -10,6 +10,7 @@ export class Inventory {
   }
 
   add(itemId, amount = 1, preferHotbar = false) {
+    if (typeof itemId !== 'string' || !Number.isInteger(amount) || amount <= 0) return 0;
     let remain = amount;
     const originalRemain = remain;
     const ranges = preferHotbar ? [[27, 36], [0, 27]] : [[0, this.slots.length]];
@@ -24,7 +25,7 @@ export class Inventory {
         remain -= addable;
         if (remain <= 0) {
           this.onChange?.();
-          return;
+          return originalRemain;
         }
       }
     }
@@ -38,6 +39,7 @@ export class Inventory {
       }
     }
     if (remain < originalRemain) this.onChange?.();
+    return originalRemain - remain;
   }
 
   has(itemId, amount = 1) {

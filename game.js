@@ -6,6 +6,8 @@ import { BlockItem, Inventory, CraftingRecipe, CraftingManager } from './invento
 import { createAnimalSystem } from './animals.js';
 import { createDropSystem } from './drops.js';
 
+const worldSeed = Math.floor(Math.random() * 2147483647);
+
 const itemDefs = {
     wood: new BlockItem('wood', '木頭'),
     sand: new BlockItem('sand', '沙子'),
@@ -35,6 +37,7 @@ const itemDefs = {
     cooked_pork: new BlockItem('cooked_pork', '熟豬肉'),
     cooked_beef: new BlockItem('cooked_beef', '熟牛肉'),
     cooked_mutton: new BlockItem('cooked_mutton', '熟羊肉'),
+    volleyball: new BlockItem('volleyball', '排球'),
     wood_helmet: new BlockItem('wood_helmet', '木頭帽子'),
     wood_chest: new BlockItem('wood_chest', '木頭護甲'),
     wood_legs: new BlockItem('wood_legs', '木頭護腿'),
@@ -53,6 +56,7 @@ Object.keys(blockIconColors).forEach((id) => {
 });
 
 const inventory = new Inventory();
+inventory.add('volleyball', 1, false);
 const craftingManager = new CraftingManager(inventory);
 craftingManager.addRecipe(new CraftingRecipe('plank_recipe', '木頭 x1 → 木板 x4', [{ itemId: 'wood', amount: 1 }], { itemId: 'plank', amount: 4 }));
 craftingManager.addRecipe(new CraftingRecipe('rope_recipe', '樹葉 x2 → 草繩 x1', [{ itemId: 'leaf', amount: 2 }], { itemId: 'rope', amount: 1 }));
@@ -83,6 +87,8 @@ const miningProgressEl = document.getElementById('mining-progress');
 const miningProgressFillEl = document.getElementById('mining-progress-fill');
 const eatingProgressEl = document.getElementById('eating-progress');
 const eatingProgressFillEl = document.getElementById('eating-progress-fill');
+const throwProgressEl = document.getElementById('throw-progress');
+const throwProgressFillEl = document.getElementById('throw-progress-fill');
 
 let inventoryOpen = false;
 let craftingMode = 'inventory'; // inventory | table | furnace
@@ -92,12 +98,6 @@ let craftSlots = Array.from({ length: 4 }, () => null);
 let activeFurnaceKey = null;
 const furnaceStates = new Map();
 const equipment = { helmet: null, chest: null, legs: null, boots: null };
-if (loadedSave) {
-    for (const slot of Object.keys(equipment)) {
-        const item = loadedSave.equipment[slot];
-        equipment[slot] = item && typeof item.itemId === 'string' ? { itemId: item.itemId } : null;
-    }
-}
 let selectedIdx = 0;
 let isThirdPerson = false;
 let lastViewToggleAt = 0;
@@ -137,6 +137,8 @@ let lastMiningSwingAt = 0;
 let eatingState = null;
 let rightMouseDown = false;
 let lastEatingSwingAt = 0;
+let throwChargeState = null;
+const volleyballProjectiles = [];
 
 const foodValues = {
     raw_pork: 3,
@@ -394,7 +396,6 @@ function renderEquipment() {
             }
             inventory.remove(invSlot.itemId, 1);
             equipment[slot] = { itemId: invSlot.itemId };
-            markSaveDirty();
             renderInventory(); renderHotbar(); renderEquipment();
         };
 
@@ -402,7 +403,6 @@ function renderEquipment() {
             if (!equipment[slot]) return;
             inventory.add(equipment[slot].itemId, 1, false);
             equipment[slot] = null;
-            markSaveDirty();
             renderInventory(); renderHotbar(); renderEquipment();
         };
     });
@@ -696,6 +696,11 @@ function toggleInventory(mode = 'inventory') {
     inventoryOpen = !inventoryOpen;
 
     if (inventoryOpen) {
+        leftMouseDown = false;
+        rightMouseDown = false;
+        cancelMining();
+        cancelEating();
+        cancelThrowCharge();
         openedInventoryFromLock = controls.isLocked;
         if (controls.isLocked) {
             unlockingForInventory = true;
@@ -748,7 +753,6 @@ const blockByPos = new Map();
 const columnIndex = new Map();
 const removedBlocks = new Set(); // 儲存被挖掉的座標 "x,y,z"
 const placedBlocks = new Map(); // 玩家放置的方塊，座標字串 -> 方塊類型
-if (loadedSave) applyWorldChanges(loadedSave, removedBlocks, placedBlocks);
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const worldWorker = new Worker('./worldWorker.js', { type: 'module' });
 const pendingChunks = new Set();
@@ -768,6 +772,8 @@ const animalSystem = createAnimalSystem({
 
 const zombies = [];
 let zombieSpawnTimer = 0;
+const creepers = [];
+let creeperSpawnTimer = 0;
 
 function createZombie(x, y, z) {
     const zGroup = new THREE.Group();
@@ -884,6 +890,155 @@ function updateZombies(dt) {
     }
 }
 
+function createCreeper(x, y, z) {
+    const group = new THREE.Group();
+    const green = new THREE.MeshLambertMaterial({ color: 0x55a832 });
+    const darkGreen = new THREE.MeshLambertMaterial({ color: 0x397a25 });
+    const face = new THREE.MeshLambertMaterial({ color: 0x172617 });
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.72, 0.72), green);
+    head.position.y = 1.5;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.9, 0.42), darkGreen);
+    body.position.y = 0.75;
+    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.03), face);
+    eyeL.position.set(-0.17, 1.62, -0.375);
+    const eyeR = eyeL.clone();
+    eyeR.position.x = 0.17;
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.03), face);
+    mouth.position.set(0, 1.38, -0.375);
+    const legs = [];
+    for (const [lx, lz] of [[-0.2, -0.14], [0.2, -0.14], [-0.2, 0.14], [0.2, 0.14]]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.42, 0.22), green);
+        leg.position.set(lx, 0.21, lz);
+        legs.push(leg);
+    }
+    group.add(head, body, eyeL, eyeR, mouth, ...legs);
+    group.position.set(x, y, z);
+    group.userData = {
+        health: 4,
+        hitCooldown: 0,
+        velocityY: 0,
+        canJump: true,
+        phase: Math.random() * Math.PI * 2,
+        fuse: 0,
+        legs
+    };
+    return group;
+}
+
+function spawnCreeperNearPlayer() {
+    for (let attempt = 0; attempt < 8; attempt++) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 14 + Math.random() * 18;
+        const x = Math.floor(camera.position.x + Math.cos(angle) * distance) + 0.5;
+        const z = Math.floor(camera.position.z + Math.sin(angle) * distance) + 0.5;
+        const nearby = getNearbyBlocks(x, z, 2);
+        const approximateY = getSurfaceHeightApprox(Math.round(x), Math.round(z));
+        const groundY = getGroundAt(x, z, nearby, 0.34, approximateY + 1.5);
+        if (groundY === -999 || checkWall(x, groundY + 1.1, z, nearby, 0.34)) continue;
+        const creeper = createCreeper(x, groundY, z);
+        scene.add(creeper);
+        creepers.push(creeper);
+        return;
+    }
+}
+
+function removeCreeper(target) {
+    const index = creepers.indexOf(target);
+    if (index < 0) return false;
+    scene.remove(target);
+    creepers.splice(index, 1);
+    return true;
+}
+
+function explodeCreeper(creeper) {
+    const distance = creeper.position.distanceTo(camera.position);
+    if (distance < 5) {
+        const strength = Math.max(0, 1 - distance / 5);
+        damagePlayer(Math.max(2, Math.ceil(12 * strength)), 'creeper');
+        const away = new THREE.Vector3(
+            camera.position.x - creeper.position.x,
+            0,
+            camera.position.z - creeper.position.z
+        );
+        if (away.lengthSq() > 0.0001) away.normalize();
+        velocity.x += away.x * 15 * strength;
+        velocity.z += away.z * 15 * strength;
+        velocity.y += 7 * strength;
+    }
+    removeCreeper(creeper);
+}
+
+function updateCreepers(dt) {
+    creeperSpawnTimer += dt;
+    if (creeperSpawnTimer >= 45) {
+        creeperSpawnTimer = 0;
+        if (creepers.length < 4) spawnCreeperNearPlayer();
+    }
+    for (let i = creepers.length - 1; i >= 0; i--) {
+        const creeper = creepers[i];
+        const data = creeper.userData;
+        data.hitCooldown = Math.max(0, data.hitCooldown - dt);
+        const toPlayer = new THREE.Vector3(
+            camera.position.x - creeper.position.x,
+            0,
+            camera.position.z - creeper.position.z
+        );
+        const horizontalDistance = toPlayer.length();
+        if (horizontalDistance > 0.001) toPlayer.normalize();
+
+        const playerCenterY = camera.position.y - currentHeight * 0.5;
+        const distanceToPlayer = Math.hypot(
+            camera.position.x - creeper.position.x,
+            playerCenterY - (creeper.position.y + 0.9),
+            camera.position.z - creeper.position.z
+        );
+        if (distanceToPlayer < 2.8) {
+            data.fuse += dt;
+            const pulse = 1 + Math.sin(data.fuse * 22) * Math.min(0.08, data.fuse * 0.04);
+            creeper.scale.set(pulse, 1 + (pulse - 1) * 1.8, pulse);
+            if (data.fuse >= 1.5) {
+                explodeCreeper(creeper);
+                continue;
+            }
+        } else {
+            data.fuse = Math.max(0, data.fuse - dt * 2);
+            creeper.scale.lerp(new THREE.Vector3(1, 1, 1), Math.min(1, dt * 10));
+            const step = Math.min(Math.max(0, horizontalDistance - 1.8), 1.45 * dt);
+            const nextX = creeper.position.x + toPlayer.x * step;
+            const nextZ = creeper.position.z + toPlayer.z * step;
+            const nearby = getNearbyBlocks(creeper.position.x, creeper.position.z, 3);
+            const ahead = getNearbyBlocks(nextX, nextZ, 3);
+            const currentGround = getGroundAt(creeper.position.x, creeper.position.z, nearby, 0.34, creeper.position.y + 0.8);
+            const nextGround = getGroundAt(nextX, nextZ, ahead, 0.34, creeper.position.y + 1.2);
+            const heightDifference = currentGround !== -999 && nextGround !== -999 ? nextGround - currentGround : 0;
+            const blocked = checkWall(nextX, creeper.position.y + 1.1, nextZ, ahead, 0.34);
+            if (!blocked && nextGround !== -999 && heightDifference <= 1.05) {
+                creeper.position.set(nextX, nextGround, nextZ);
+            } else if (heightDifference > 0.7 && heightDifference <= 1.6 && data.canJump) {
+                data.velocityY = 9.5;
+                data.canJump = false;
+            }
+            if (currentGround !== -999) data.velocityY -= 28 * dt;
+            creeper.position.y += data.velocityY * dt;
+            const groundNow = getGroundAt(creeper.position.x, creeper.position.z, nearby, 0.34, creeper.position.y + 0.1);
+            if (groundNow !== -999 && creeper.position.y <= groundNow) {
+                creeper.position.y = groundNow;
+                data.velocityY = 0;
+                data.canJump = true;
+            }
+        }
+
+        data.phase += dt * 7;
+        for (let legIndex = 0; legIndex < data.legs.length; legIndex++) {
+            data.legs[legIndex].rotation.x = Math.sin(data.phase + (legIndex % 2) * Math.PI) * 0.45;
+        }
+        creeper.rotation.y = Math.atan2(toPlayer.x, toPlayer.z) + Math.PI;
+        const dx = creeper.position.x - camera.position.x;
+        const dz = creeper.position.z - camera.position.z;
+        if (dx * dx + dz * dz > 150 * 150) removeCreeper(creeper);
+    }
+}
+
 const dropSystem = createDropSystem({
     scene,
     camera,
@@ -891,13 +1046,110 @@ const dropSystem = createDropSystem({
     getNearbyBlocks,
     getMaterials,
     onInventoryUpdated: () => {
-        markSaveDirty();
         renderHotbar();
         renderHeldItemInHand();
         if (inventoryOpen) { renderInventory(); renderCrafting(); }
     },
     getPlayerFeetY: () => camera.position.y - currentHeight
 });
+
+function removeZombie(target) {
+    const index = zombies.indexOf(target);
+    if (index < 0) return false;
+    scene.remove(target);
+    zombies.splice(index, 1);
+    return true;
+}
+
+function recoverVolleyball(position) {
+    dropSystem.spawnDrop('volleyball', position.x, position.y, position.z);
+}
+
+function launchVolleyball(charge) {
+    const selectedSlot = inventory.getSlots(27, 36)[selectedIdx];
+    if (!selectedSlot || selectedSlot.itemId !== 'volleyball') return;
+    if (!inventory.remove('volleyball', 1)) return;
+
+    const direction = new THREE.Vector3();
+    camera.getWorldDirection(direction);
+    direction.normalize();
+    const ballMaterial = getMaterials('volleyball')[0];
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 8), ballMaterial);
+    ball.position.copy(camera.position).addScaledVector(direction, 0.7);
+    ball.userData.velocity = direction.multiplyScalar(8 + charge * 20);
+    ball.userData.velocity.y += 1.5 + charge * 2.5;
+    ball.userData.age = 0;
+    scene.add(ball);
+    volleyballProjectiles.push(ball);
+    renderHotbar();
+    renderHeldItemInHand();
+}
+
+function finishVolleyballProjectile(index, position) {
+    const ball = volleyballProjectiles[index];
+    if (!ball) return;
+    scene.remove(ball);
+    volleyballProjectiles.splice(index, 1);
+    recoverVolleyball(position);
+}
+
+function updateVolleyballProjectiles(dt) {
+    for (let i = volleyballProjectiles.length - 1; i >= 0; i--) {
+        const ball = volleyballProjectiles[i];
+        const previous = ball.position.clone();
+        ball.userData.age += dt;
+        ball.userData.velocity.y -= 12 * dt;
+        ball.position.addScaledVector(ball.userData.velocity, dt);
+        ball.rotation.x += dt * 9;
+        ball.rotation.z += dt * 7;
+
+        const travel = ball.position.clone().sub(previous);
+        const travelDistance = travel.length();
+        if (travelDistance > 0.0001) {
+            const raycaster = new THREE.Raycaster(previous, travel.normalize(), 0, travelDistance + 0.25);
+            const nearbyBlocks = getNearbyBlocks(ball.position.x, ball.position.z, 2);
+            if (raycaster.intersectObjects(nearbyBlocks).length > 0) {
+                finishVolleyballProjectile(i, previous);
+                continue;
+            }
+        }
+
+        let hitMob = false;
+        for (const animal of [...animalSystem.getAnimals()]) {
+            const center = animal.position.clone().add(new THREE.Vector3(0, 0.8, 0));
+            if (center.distanceToSquared(ball.position) > 0.85 * 0.85) continue;
+            const direction = ball.userData.velocity.clone().setY(0);
+            animalSystem.damageAnimal(animal, 999, direction);
+            hitMob = true;
+            break;
+        }
+        if (!hitMob) {
+            for (const zombie of [...zombies]) {
+                const center = zombie.position.clone().add(new THREE.Vector3(0, 0.9, 0));
+                if (center.distanceToSquared(ball.position) > 0.85 * 0.85) continue;
+                removeZombie(zombie);
+                hitMob = true;
+                break;
+            }
+        }
+        if (!hitMob) {
+            for (const creeper of [...creepers]) {
+                const center = creeper.position.clone().add(new THREE.Vector3(0, 0.9, 0));
+                if (center.distanceToSquared(ball.position) > 0.85 * 0.85) continue;
+                removeCreeper(creeper);
+                hitMob = true;
+                break;
+            }
+        }
+        if (hitMob) {
+            finishVolleyballProjectile(i, ball.position.clone());
+            continue;
+        }
+        if (ball.userData.age >= 8 || ball.position.y < -20) {
+            finishVolleyballProjectile(i, ball.position.clone());
+        }
+    }
+}
 
 function posKey(x, y, z) { return `${x},${y},${z}`; }
 function colKey(x, z) { return `${x},${z}`; }
@@ -1162,6 +1414,7 @@ controls.addEventListener('unlock', () => {
     rightMouseDown = false;
     cancelMining();
     cancelEating();
+    cancelThrowCharge();
     if (unlockingForInventory) {
         unlockingForInventory = false;
         overlay.style.display = 'none';
@@ -1250,6 +1503,7 @@ function getCenterRayHits() {
     return {
         blocks: raycaster.intersectObjects(interactableBlocks),
         zombies: raycaster.intersectObjects(zombies, true),
+        creepers: raycaster.intersectObjects(creepers, true),
         animals: raycaster.intersectObjects(animalSystem.getAnimals(), true)
     };
 }
@@ -1281,18 +1535,24 @@ function beginMining(mesh) {
 }
 
 function finishMining(mesh) {
-    if (!mesh || !blocks.includes(mesh)) {
+    if (!mesh || mesh.userData.mined || !blocks.includes(mesh)) {
         cancelMining();
         return;
     }
     const pos = mesh.position.clone();
+    const key = posKey(Math.round(pos.x), Math.round(pos.y), Math.round(pos.z));
+    if (removedBlocks.has(key)) {
+        cancelMining();
+        return;
+    }
     const blockType = mesh.userData.blockType || 'stone';
-    removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
-    dropSystem.spawnDrop(blockType, pos.x, pos.y, pos.z);
+    mesh.userData.mined = true;
+    removedBlocks.add(key);
+    cancelMining();
     removeBlockMesh(mesh);
+    dropSystem.spawnDrop(blockType, pos.x, pos.y, pos.z);
     updateNeighbors(pos.x, pos.y, pos.z);
     addExhaustion(0.08);
-    cancelMining();
 }
 
 function updateMining(dt, now) {
@@ -1301,7 +1561,11 @@ function updateMining(dt, now) {
         return;
     }
     const hits = getCenterRayHits();
-    if (hits.zombies.length > 0 && (!hits.blocks.length || hits.zombies[0].distance < hits.blocks[0].distance)) {
+    const nearestHostileDistance = Math.min(
+        hits.zombies[0]?.distance ?? Infinity,
+        hits.creepers[0]?.distance ?? Infinity
+    );
+    if (nearestHostileDistance < (hits.blocks[0]?.distance ?? Infinity)) {
         cancelMining();
         return;
     }
@@ -1315,7 +1579,11 @@ function updateMining(dt, now) {
         return;
     }
     const key = posKey(Math.round(target.position.x), Math.round(target.position.y), Math.round(target.position.z));
-    if (!miningState || miningState.key !== key) beginMining(target);
+    if (!miningState || miningState.key !== key || miningState.mesh !== target) beginMining(target);
+    if (!miningState || miningState.mesh.userData.mined) {
+        cancelMining();
+        return;
+    }
     miningState.elapsed += dt;
     miningState.duration = miningDuration(target.userData.blockType || 'stone');
     const progress = Math.min(1, miningState.elapsed / miningState.duration);
@@ -1382,9 +1650,54 @@ function updateEating(dt, now) {
     if (progress >= 1) finishEating();
 }
 
+function cancelThrowCharge() {
+    throwChargeState = null;
+    throwProgressFillEl.style.width = '0%';
+    throwProgressEl.style.display = 'none';
+}
+
+function beginThrowCharge() {
+    if (selectedItemId() !== 'volleyball') return false;
+    throwChargeState = { elapsed: 0, maxDuration: 2 };
+    throwProgressFillEl.style.width = '0%';
+    throwProgressEl.style.display = 'block';
+    return true;
+}
+
+function updateThrowCharge(dt) {
+    if (!rightMouseDown || !controls.isLocked || inventoryOpen || !throwChargeState) {
+        cancelThrowCharge();
+        return;
+    }
+    if (selectedItemId() !== 'volleyball') {
+        cancelThrowCharge();
+        return;
+    }
+    throwChargeState.elapsed = Math.min(
+        throwChargeState.maxDuration,
+        throwChargeState.elapsed + dt
+    );
+    const charge = throwChargeState.elapsed / throwChargeState.maxDuration;
+    throwProgressFillEl.style.width = `${charge * 100}%`;
+}
+
+function releaseThrowCharge() {
+    if (!throwChargeState) return;
+    const charge = Math.max(
+        0.08,
+        Math.min(1, throwChargeState.elapsed / throwChargeState.maxDuration)
+    );
+    launchVolleyball(charge);
+    cancelThrowCharge();
+}
+
 window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
     playHandSwing();
+    if (e.button === 2 && selectedItemId() === 'volleyball') {
+        rightMouseDown = beginThrowCharge();
+        return;
+    }
     if (e.button === 2 && foodValues[selectedItemId()]) {
         rightMouseDown = beginEating();
         return;
@@ -1392,9 +1705,35 @@ window.addEventListener('mousedown', (e) => {
     const hits = getCenterRayHits();
     const intersects = hits.blocks;
     const zombieHits = hits.zombies;
+    const creeperHits = hits.creepers;
     const animalHits = hits.animals;
+    const nearestCreeperDistance = creeperHits[0]?.distance ?? Infinity;
+    const nearestZombieDistance = zombieHits[0]?.distance ?? Infinity;
+    if (e.button === 0 && nearestCreeperDistance < nearestZombieDistance
+        && nearestCreeperDistance < (intersects[0]?.distance ?? Infinity)
+        && nearestCreeperDistance < (animalHits[0]?.distance ?? Infinity)) {
+        const target = findRootInCollection(creeperHits[0].object, creepers);
+        if (target) {
+            const away = new THREE.Vector3(
+                target.position.x - camera.position.x,
+                0,
+                target.position.z - camera.position.z
+            );
+            if (away.lengthSq() > 0.0001) away.normalize();
+            target.position.x += away.x * 1.9;
+            target.position.z += away.z * 1.9;
+            target.userData.velocityY = Math.max(target.userData.velocityY || 0, 4.8);
+            target.userData.fuse = 0;
+            target.userData.health -= selectedItemId() === 'volleyball' ? 999 : 1;
+            if (target.userData.health <= 0) removeCreeper(target);
+            return;
+        }
+    }
     if (zombieHits.length > 0 && e.button === 0) {
-        const nearestAnimalDistance = animalHits[0]?.distance ?? Infinity;
+        const nearestAnimalDistance = Math.min(
+            animalHits[0]?.distance ?? Infinity,
+            nearestCreeperDistance
+        );
         if (intersects.length > 0 && intersects[0].distance < zombieHits[0].distance && intersects[0].distance < nearestAnimalDistance) {
             leftMouseDown = true;
             beginMining(intersects[0].object);
@@ -1404,7 +1743,7 @@ window.addEventListener('mousedown', (e) => {
             const animal = findRootInCollection(animalHits[0].object, animalSystem.getAnimals());
             if (animal) {
                 const away = new THREE.Vector3(animal.position.x - camera.position.x, 0, animal.position.z - camera.position.z);
-                animalSystem.damageAnimal(animal, 1, away);
+                animalSystem.damageAnimal(animal, selectedItemId() === 'volleyball' ? 999 : 1, away);
                 return;
             }
         }
@@ -1417,18 +1756,17 @@ window.addEventListener('mousedown', (e) => {
             target.position.x += away.x * 1.9;
             target.position.z += away.z * 1.9;
             target.userData.velocityY = Math.max(target.userData.velocityY || 0, 4.8);
-            target.userData.health -= 1;
+            target.userData.health -= selectedItemId() === 'volleyball' ? 999 : 1;
             if (target.userData.health <= 0 && idx >= 0) {
-                scene.remove(target);
-                zombies.splice(idx, 1);
+                removeZombie(target);
             }
             return;
         }
     }
     if (animalHits.length > 0 && e.button === 0) {
         const nearestBlockDistance = intersects[0]?.distance ?? Infinity;
-        const nearestZombieDistance = zombieHits[0]?.distance ?? Infinity;
-        if (animalHits[0].distance < nearestBlockDistance && animalHits[0].distance < nearestZombieDistance) {
+        const nearestHostileDistance = Math.min(nearestZombieDistance, nearestCreeperDistance);
+        if (animalHits[0].distance < nearestBlockDistance && animalHits[0].distance < nearestHostileDistance) {
             const animal = findRootInCollection(animalHits[0].object, animalSystem.getAnimals());
             if (animal) {
                 const away = new THREE.Vector3(
@@ -1436,7 +1774,7 @@ window.addEventListener('mousedown', (e) => {
                     0,
                     animal.position.z - camera.position.z
                 );
-                animalSystem.damageAnimal(animal, 1, away);
+                animalSystem.damageAnimal(animal, selectedItemId() === 'volleyball' ? 999 : 1, away);
                 return;
             }
         }
@@ -1473,7 +1811,6 @@ window.addEventListener('mousedown', (e) => {
             if (addBlockMesh(b)) {
                 placedBlocks.set(key, selectedSlot.itemId);
                 removedBlocks.delete(key);
-                markSaveDirty();
             }
         }
     }
@@ -1484,6 +1821,7 @@ window.addEventListener('mouseup', (e) => {
         cancelMining();
     }
     if (e.button === 2) {
+        releaseThrowCharge();
         rightMouseDown = false;
         cancelEating();
     }
@@ -1493,6 +1831,7 @@ window.addEventListener('blur', () => {
     rightMouseDown = false;
     cancelMining();
     cancelEating();
+    cancelThrowCharge();
 });
 window.addEventListener('mousemove', (e) => {
     if (!controls.isLocked || !isThirdPerson) return;
@@ -1548,7 +1887,7 @@ scene.add(ambientLight);
 const sun = new THREE.DirectionalLight(0xffffff, 0.6);
 sun.position.set(10, 20, 10);
 scene.add(sun);
-const initialPlayerPosition = loadedSave?.player.position ?? { x: 0, y: 30, z: 0 };
+const initialPlayerPosition = { x: 0, y: 30, z: 0 };
 camera.position.set(initialPlayerPosition.x, initialPlayerPosition.y, initialPlayerPosition.z);
 
 const playerAnchor = new THREE.Vector3(
@@ -1652,8 +1991,11 @@ function animate() {
         animalSystem.spawnAnimalsNearPlayer();
         animalSystem.updateAnimals(dt);
         updateZombies(dt);
+        updateCreepers(dt);
         updateMining(dt, t);
         updateEating(dt, t);
+        updateThrowCharge(dt);
+        updateVolleyballProjectiles(dt);
 
         const targetH = isCrouching ? 1.2 : 1.8;
         currentHeight += (targetH - currentHeight) * 0.2;
