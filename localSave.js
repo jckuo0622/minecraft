@@ -93,9 +93,9 @@ export function applyWorldChanges(data, removedBlocks, placedBlocks) {
 }
 
 export function saveGame(data, storage) {
-    const target = storageOrDefault(storage);
-    if (!target) return false;
     try {
+        const target = storageOrDefault(storage);
+        if (!target) return false;
         target.setItem(SAVE_KEY, JSON.stringify({ ...data, version: SAVE_VERSION }));
         return true;
     } catch (error) {
@@ -105,9 +105,9 @@ export function saveGame(data, storage) {
 }
 
 export function loadGame(storage) {
-    const target = storageOrDefault(storage);
-    if (!target) return null;
     try {
+        const target = storageOrDefault(storage);
+        if (!target) return null;
         const raw = target.getItem(SAVE_KEY);
         if (!raw) return null;
         return validateSave(JSON.parse(raw));
@@ -118,9 +118,9 @@ export function loadGame(storage) {
 }
 
 export function clearSave(storage) {
-    const target = storageOrDefault(storage);
-    if (!target) return false;
     try {
+        const target = storageOrDefault(storage);
+        if (!target) return false;
         target.removeItem(SAVE_KEY);
         return true;
     } catch (error) {
