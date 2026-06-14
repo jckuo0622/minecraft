@@ -1,4 +1,4 @@
-import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
+import * as THREE from 'three';
 import { getPixelCanvas } from './textures.js';
 import { getGroundAt, checkWall } from './physics.js';
 
