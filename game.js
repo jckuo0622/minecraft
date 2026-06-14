@@ -1508,6 +1508,8 @@ renderHeldItemInHand();
 renderSurvivalHud();
 
 // --- D. 控制與點擊 ---
+const playButton = document.getElementById('btn-play');
+playButton?.addEventListener('click', () => controls.lock());
 controls.addEventListener('lock', () => {
     overlay.style.display = 'none';
     crosshair.style.display = inventoryOpen ? 'none' : 'block';
