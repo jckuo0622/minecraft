@@ -1,4 +1,4 @@
-import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
+import * as THREE from 'three';
 import { getGroundAt } from './physics.js';
 
 export function createDropSystem({ scene, camera, inventory, getNearbyBlocks, getMaterials, onInventoryUpdated, getPlayerFeetY }) {

@@ -726,6 +726,7 @@ scene.fog = new THREE.FogExp2(0xbfd1e5, 0.03);
 const DAY_DURATION = 10 * 60;
 const NIGHT_DURATION = 10 * 60;
 const DAY_NIGHT_CYCLE = DAY_DURATION + NIGHT_DURATION;
+const worldSeed = 1337;
 let worldTime = 90;
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
