@@ -5,7 +5,20 @@ import { getGroundAt, checkWall, checkCapsuleWall } from './physics.js';
 import { BlockItem, Inventory, CraftingRecipe, CraftingManager } from './inventory.js';
 import { createAnimalSystem } from './animals.js';
 import { createDropSystem } from './drops.js';
+import {
+    applyWorldChanges,
+    createDirtyTracker,
+    deserializeInventory,
+    loadGame,
+    saveGame,
+    serializeInventory,
+    serializeWorldChanges
+} from './localSave.js';
 
+const loadedSave = loadGame();
+const saveTracker = createDirtyTracker();
+const markSaveDirty = () => saveTracker.markSaveDirty();
+const worldSeed = loadedSave?.worldSeed ?? Math.floor(Math.random() * 2147483647);
 
 const itemDefs = {
     wood: new BlockItem('wood', '木頭'),
@@ -54,8 +67,9 @@ Object.keys(blockIconColors).forEach((id) => {
     itemIconDataUrl[id] = cv.toDataURL();
 });
 
-const inventory = new Inventory();
-inventory.add('volleyball', 1, false);
+const inventory = new Inventory(36, 64, markSaveDirty);
+if (loadedSave) deserializeInventory(inventory, loadedSave.inventory);
+else inventory.add('volleyball', 1, false);
 const craftingManager = new CraftingManager(inventory);
 craftingManager.addRecipe(new CraftingRecipe('plank_recipe', '木頭 x1 → 木板 x4', [{ itemId: 'wood', amount: 1 }], { itemId: 'plank', amount: 4 }));
 craftingManager.addRecipe(new CraftingRecipe('rope_recipe', '樹葉 x2 → 草繩 x1', [{ itemId: 'leaf', amount: 2 }], { itemId: 'rope', amount: 1 }));
@@ -97,6 +111,12 @@ let craftSlots = Array.from({ length: 4 }, () => null);
 let activeFurnaceKey = null;
 const furnaceStates = new Map();
 const equipment = { helmet: null, chest: null, legs: null, boots: null };
+if (loadedSave) {
+    for (const slot of Object.keys(equipment)) {
+        const item = loadedSave.equipment[slot];
+        equipment[slot] = item && typeof item.itemId === 'string' ? { itemId: item.itemId } : null;
+    }
+}
 let selectedIdx = 0;
 let isThirdPerson = false;
 let lastViewToggleAt = 0;
@@ -105,8 +125,8 @@ let thirdPersonPitch = -0.2;
 
 const MAX_HEALTH = 20;
 const MAX_HUNGER = 20;
-let playerHealth = MAX_HEALTH;
-let playerHunger = MAX_HUNGER;
+let playerHealth = loadedSave ? Math.max(0, Math.min(MAX_HEALTH, loadedSave.player.health)) : MAX_HEALTH;
+let playerHunger = loadedSave ? Math.max(0, Math.min(MAX_HUNGER, loadedSave.player.hunger)) : MAX_HUNGER;
 let hungerExhaustion = 0;
 let survivalTick = 0;
 let regenerationTick = 0;
@@ -180,6 +200,7 @@ function damagePlayer(amount, source = 'generic', ignoreArmor = false) {
     const reduction = ignoreArmor ? 0 : Math.min(0.6, armorPoints() * 0.04);
     const damage = Math.max(1, Math.ceil(amount * (1 - reduction)));
     playerHealth = Math.max(0, playerHealth - damage);
+    markSaveDirty();
     damageCooldown = source === 'starvation' ? 0.35 : 0.65;
     renderSurvivalHud();
     document.body.classList.remove('damage-flash');
@@ -191,6 +212,7 @@ function damagePlayer(amount, source = 'generic', ignoreArmor = false) {
 function respawnPlayer() {
     playerHealth = MAX_HEALTH;
     playerHunger = MAX_HUNGER;
+    markSaveDirty();
     hungerExhaustion = 0;
     velocity.set(0, 0, 0);
     camera.position.set(0, 30, 0);
@@ -209,6 +231,7 @@ function addExhaustion(amount) {
     while (hungerExhaustion >= 4 && playerHunger > 0) {
         hungerExhaustion -= 4;
         playerHunger--;
+        markSaveDirty();
         renderSurvivalHud();
     }
 }
@@ -223,6 +246,7 @@ function updateSurvival(dt, horizontalSpeed) {
         if (regenerationTick >= 4) {
             regenerationTick = 0;
             playerHealth++;
+            markSaveDirty();
             addExhaustion(1.5);
             renderSurvivalHud();
         }
@@ -395,6 +419,7 @@ function renderEquipment() {
             }
             inventory.remove(invSlot.itemId, 1);
             equipment[slot] = { itemId: invSlot.itemId };
+            markSaveDirty();
             renderInventory(); renderHotbar(); renderEquipment();
         };
 
@@ -402,6 +427,7 @@ function renderEquipment() {
             if (!equipment[slot]) return;
             inventory.add(equipment[slot].itemId, 1, false);
             equipment[slot] = null;
+            markSaveDirty();
             renderInventory(); renderHotbar(); renderEquipment();
         };
     });
@@ -726,7 +752,7 @@ scene.fog = new THREE.FogExp2(0xbfd1e5, 0.03);
 const DAY_DURATION = 10 * 60;
 const NIGHT_DURATION = 10 * 60;
 const DAY_NIGHT_CYCLE = DAY_DURATION + NIGHT_DURATION;
-let worldTime = 90;
+let worldTime = loadedSave ? ((loadedSave.worldTime % DAY_NIGHT_CYCLE) + DAY_NIGHT_CYCLE) % DAY_NIGHT_CYCLE : 90;
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -746,6 +772,8 @@ const blocks = [];
 const blockByPos = new Map();
 const columnIndex = new Map();
 const removedBlocks = new Set(); // 儲存被挖掉的座標 "x,y,z"
+const placedBlocks = new Map(); // 玩家放置的方塊，座標字串 -> 方塊類型
+if (loadedSave) applyWorldChanges(loadedSave, removedBlocks, placedBlocks);
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const worldWorker = new Worker('./worldWorker.js', { type: 'module' });
 const pendingChunks = new Set();
@@ -888,6 +916,7 @@ const dropSystem = createDropSystem({
     getNearbyBlocks,
     getMaterials,
     onInventoryUpdated: () => {
+        markSaveDirty();
         renderHotbar();
         renderHeldItemInHand();
         if (inventoryOpen) { renderInventory(); renderCrafting(); }
@@ -1039,9 +1068,11 @@ function getNearbyBlocks(x, z, radius = 2) {
 
 
 function getSurfaceHeightApprox(x, z) {
-    let mountain = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 5;
-    let hills = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 2;
-    let detail = Math.sin(x * 0.4) * Math.cos(z * 0.4) * 0.5;
+    const sx = x + (worldSeed % 997);
+    const sz = z + (Math.floor(worldSeed / 997) % 991);
+    let mountain = Math.sin(sx * 0.05) * Math.cos(sz * 0.05) * 5;
+    let hills = Math.sin(sx * 0.15) * Math.sin(sz * 0.15) * 2;
+    let detail = Math.sin(sx * 0.4) * Math.cos(sz * 0.4) * 0.5;
     return Math.round(mountain + hills + detail);
 }
 
@@ -1081,7 +1112,8 @@ function spawnChunk(cx, cz) {
         type: 'generate_chunk',
         cx,
         cz,
-        removedBlocks: Array.from(removedBlocks)
+        removedBlocks: Array.from(removedBlocks),
+        worldSeed
     });
     renderHeldItemInHand();
 }
@@ -1099,11 +1131,23 @@ function flushChunkBuildQueue(maxChunksPerFrame = 1) {
         if (loadedChunks.has(key)) continue;
         const chunkBlocks = [];
         for (const data of blockData) {
+            const key = posKey(data.x, data.y, data.z);
+            if (placedBlocks.has(key) || removedBlocks.has(key)) continue;
             const m = new THREE.Mesh(boxGeo, getMaterials(data.type));
             m.userData.blockType = data.type;
             m.position.set(data.x, data.y, data.z);
             addBlockMesh(m);
             chunkBlocks.push(m);
+        }
+        const [cx, cz] = key.split(',').map(Number);
+        for (const [positionKey, blockType] of placedBlocks) {
+            const [x, y, z] = positionKey.split(',').map(Number);
+            if (Math.floor(x / CHUNK_SIZE) !== cx || Math.floor(z / CHUNK_SIZE) !== cz) continue;
+            const m = new THREE.Mesh(boxGeo, getMaterials(blockType));
+            m.userData.blockType = blockType;
+            m.userData.playerPlaced = true;
+            m.position.set(x, y, z);
+            if (addBlockMesh(m)) chunkBlocks.push(m);
         }
         loadedChunks.set(key, chunkBlocks);
     }
@@ -1361,7 +1405,10 @@ function finishMining(mesh) {
     }
     const pos = mesh.position.clone();
     const blockType = mesh.userData.blockType || 'stone';
-    removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
+    const key = posKey(Math.round(pos.x), Math.round(pos.y), Math.round(pos.z));
+    placedBlocks.delete(key);
+    removedBlocks.add(key);
+    markSaveDirty();
     dropSystem.spawnDrop(blockType, pos.x, pos.y, pos.z);
     removeBlockMesh(mesh);
     updateNeighbors(pos.x, pos.y, pos.z);
@@ -1430,6 +1477,7 @@ function finishEating() {
     }
     inventory.remove(eatingState.itemId, 1);
     playerHunger = Math.min(MAX_HUNGER, playerHunger + foodValue);
+    markSaveDirty();
     hungerExhaustion = Math.max(0, hungerExhaustion - 1);
     renderSurvivalHud();
     renderHotbar();
@@ -1586,8 +1634,12 @@ window.addEventListener('mousedown', (e) => {
             renderQuickCraft();
             const placePos = pos.add(intersect.face.normal);
             b.position.copy(placePos);
-            removedBlocks.delete(`${placePos.x},${placePos.y},${placePos.z}`);
-            addBlockMesh(b);
+            const key = posKey(Math.round(placePos.x), Math.round(placePos.y), Math.round(placePos.z));
+            b.userData.playerPlaced = true;
+            if (addBlockMesh(b)) {
+                placedBlocks.set(key, selectedSlot.itemId);
+                markSaveDirty();
+            }
         }
     }
 });
@@ -1663,9 +1715,14 @@ scene.add(ambientLight);
 const sun = new THREE.DirectionalLight(0xffffff, 0.6);
 sun.position.set(10, 20, 10);
 scene.add(sun);
-camera.position.set(0, 30, 0);
+const initialPlayerPosition = loadedSave?.player.position ?? { x: 0, y: 30, z: 0 };
+camera.position.set(initialPlayerPosition.x, initialPlayerPosition.y, initialPlayerPosition.z);
 
-const playerAnchor = new THREE.Vector3(0, 30, 0);
+const playerAnchor = new THREE.Vector3(
+    initialPlayerPosition.x,
+    initialPlayerPosition.y - 1.8,
+    initialPlayerPosition.z
+);
 const thirdPersonDistance = 4.2;
 const thirdPersonFrontDistance = 3.2;
 const playerFacingDir = new THREE.Vector3(0, 0, 1);
@@ -1673,9 +1730,66 @@ const daySkyColor = new THREE.Color(0x79b9e8);
 const sunsetSkyColor = new THREE.Color(0xc98262);
 const nightSkyColor = new THREE.Color(0x071326);
 const blendedSkyColor = new THREE.Color();
+const AUTOSAVE_INTERVAL_MS = 15000;
+const MOVEMENT_DIRTY_DISTANCE_SQ = 1;
+let lastAutosaveAt = performance.now();
+let lastSavedPosition = camera.position.clone();
+let dayNightDirtyTimer = 0;
+
+function buildSaveData() {
+    const position = isThirdPerson
+        ? { x: playerAnchor.x, y: playerAnchor.y + currentHeight, z: playerAnchor.z }
+        : { x: camera.position.x, y: camera.position.y, z: camera.position.z };
+    const worldChanges = serializeWorldChanges(removedBlocks, placedBlocks);
+    return {
+        worldSeed,
+        player: {
+            position,
+            health: playerHealth,
+            hunger: playerHunger
+        },
+        inventory: serializeInventory(inventory),
+        equipment: Object.fromEntries(
+            Object.entries(equipment).map(([slot, item]) => [slot, item ? { itemId: item.itemId } : null])
+        ),
+        worldTime,
+        ...worldChanges
+    };
+}
+
+function saveCurrentGame(force = false) {
+    if (!force && !saveTracker.isSaveDirty()) return false;
+    const data = buildSaveData();
+    if (!saveGame(data)) return false;
+    saveTracker.markSaved();
+    lastAutosaveAt = performance.now();
+    lastSavedPosition.set(data.player.position.x, data.player.position.y, data.player.position.z);
+    return true;
+}
+
+function updateAutosave(now) {
+    const playerPosition = isThirdPerson
+        ? new THREE.Vector3(playerAnchor.x, playerAnchor.y + currentHeight, playerAnchor.z)
+        : camera.position;
+    if (playerPosition.distanceToSquared(lastSavedPosition) >= MOVEMENT_DIRTY_DISTANCE_SQ) {
+        markSaveDirty();
+    }
+    if (saveTracker.isSaveDirty() && now - lastAutosaveAt >= AUTOSAVE_INTERVAL_MS) {
+        saveCurrentGame();
+    }
+}
+
+window.addEventListener('beforeunload', () => {
+    saveCurrentGame(true);
+});
 
 function updateDayNight(dt) {
     worldTime = (worldTime + dt) % DAY_NIGHT_CYCLE;
+    dayNightDirtyTimer += dt;
+    if (dayNightDirtyTimer >= 1) {
+        dayNightDirtyTimer = 0;
+        markSaveDirty();
+    }
     const isDayHalf = worldTime < DAY_DURATION;
     const halfProgress = isDayHalf
         ? worldTime / DAY_DURATION
@@ -1766,6 +1880,7 @@ function animate() {
         updateEating(dt, t);
         updateThrowCharge(dt);
         updateVolleyballProjectiles(dt);
+        updateAutosave(t);
 
         const targetH = isCrouching ? 1.2 : 1.8;
         currentHeight += (targetH - currentHeight) * 0.2;

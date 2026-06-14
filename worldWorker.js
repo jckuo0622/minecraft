@@ -1,14 +1,20 @@
 const CHUNK_SIZE = 16;
 
-function getNoiseHeight(x, z) {
-  let mountain = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 5;
-  let hills = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 2;
-  let detail = Math.sin(x * 0.4) * Math.cos(z * 0.4) * 0.5;
+function seedCoordinates(x, z, seed) {
+  return [x + (seed % 997), z + (Math.floor(seed / 997) % 991)];
+}
+
+function getNoiseHeight(x, z, seed) {
+  const [sx, sz] = seedCoordinates(x, z, seed);
+  let mountain = Math.sin(sx * 0.05) * Math.cos(sz * 0.05) * 5;
+  let hills = Math.sin(sx * 0.15) * Math.sin(sz * 0.15) * 2;
+  let detail = Math.sin(sx * 0.4) * Math.cos(sz * 0.4) * 0.5;
   return Math.round(mountain + hills + detail);
 }
 
-function getBiomeNoise(x, z) {
-  return Math.sin(x * 0.015) + Math.cos(z * 0.015);
+function getBiomeNoise(x, z, seed) {
+  const [sx, sz] = seedCoordinates(x, z, seed);
+  return Math.sin(sx * 0.015) + Math.cos(sz * 0.015);
 }
 
 function seededRandom(x, z, seed = 1337) {
@@ -33,7 +39,7 @@ function addOreVein(blocks, removed, wx, wy, wz, oreType, seedOffset, radius = 1
   }
 }
 
-function buildChunk(cx, cz, removedKeys) {
+function buildChunk(cx, cz, removedKeys, worldSeed) {
   const removed = new Set(removedKeys);
   const blocks = [];
 
@@ -41,32 +47,32 @@ function buildChunk(cx, cz, removedKeys) {
     for (let z = 0; z < CHUNK_SIZE; z++) {
       const wx = cx * CHUNK_SIZE + x;
       const wz = cz * CHUNK_SIZE + z;
-      const h = getNoiseHeight(wx, wz);
-      const biomeVal = getBiomeNoise(wx, wz);
+      const h = getNoiseHeight(wx, wz, worldSeed);
+      const biomeVal = getBiomeNoise(wx, wz, worldSeed);
       const isDesert = biomeVal > 0.6;
 
       if (removed.has(`${wx},${h},${wz}`)) continue;
       blocks.push({ x: wx, y: h, z: wz, type: isDesert ? 'sand' : 'grass' });
 
       // 地下礦脈生成（煤礦較淺、鐵礦較深）
-      const coalY = h - 3 - Math.floor(seededRandom(wx + 41, wz + 59) * 6);
-      const ironY = h - 6 - Math.floor(seededRandom(wx + 79, wz + 11) * 7);
-      if (coalY > -18 && seededRandom(wx + 211, wz + 307) < 0.08) {
-        addOreVein(blocks, removed, wx, coalY, wz, 'coal_ore', 701, 1);
+      const coalY = h - 3 - Math.floor(seededRandom(wx + 41, wz + 59, worldSeed) * 6);
+      const ironY = h - 6 - Math.floor(seededRandom(wx + 79, wz + 11, worldSeed) * 7);
+      if (coalY > -18 && seededRandom(wx + 211, wz + 307, worldSeed) < 0.08) {
+        addOreVein(blocks, removed, wx, coalY, wz, 'coal_ore', worldSeed + 701, 1);
       }
-      if (ironY > -22 && seededRandom(wx + 509, wz + 131) < 0.055) {
-        addOreVein(blocks, removed, wx, ironY, wz, 'iron_ore', 1701, 1);
+      if (ironY > -22 && seededRandom(wx + 509, wz + 131, worldSeed) < 0.055) {
+        addOreVein(blocks, removed, wx, ironY, wz, 'iron_ore', worldSeed + 1701, 1);
       }
 
-      if (!isDesert && h >= 0 && seededRandom(wx, wz) < 0.015) {
-        const treeH = 3 + Math.floor(seededRandom(wx + 19, wz + 23) * 2);
+      if (!isDesert && h >= 0 && seededRandom(wx, wz, worldSeed) < 0.015) {
+        const treeH = 3 + Math.floor(seededRandom(wx + 19, wz + 23, worldSeed) * 2);
         for (let ty = 1; ty <= treeH; ty++) {
           blocks.push({ x: wx, y: h + ty, z: wz, type: 'wood' });
         }
         for (let lx = -1; lx <= 1; lx++) {
           for (let lz = -1; lz <= 1; lz++) {
             for (let ly = 0; ly < 2; ly++) {
-              if (Math.abs(lx) + Math.abs(lz) === 2 && seededRandom(wx + lx * 3, wz + lz * 3 + ly * 5) > 0.5) continue;
+              if (Math.abs(lx) + Math.abs(lz) === 2 && seededRandom(wx + lx * 3, wz + lz * 3 + ly * 5, worldSeed) > 0.5) continue;
               blocks.push({ x: wx + lx, y: h + treeH + ly + 1, z: wz + lz, type: 'leaf' });
             }
           }
@@ -78,8 +84,8 @@ function buildChunk(cx, cz, removedKeys) {
 }
 
 self.onmessage = (event) => {
-  const { type, cx, cz, removedBlocks } = event.data;
+  const { type, cx, cz, removedBlocks, worldSeed } = event.data;
   if (type !== 'generate_chunk') return;
-  const blocks = buildChunk(cx, cz, removedBlocks || []);
+  const blocks = buildChunk(cx, cz, removedBlocks || [], worldSeed);
   self.postMessage({ type: 'chunk_generated', key: `${cx},${cz}`, cx, cz, blocks });
 };
