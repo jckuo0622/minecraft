@@ -35,7 +35,6 @@ const itemDefs = {
     cooked_pork: new BlockItem('cooked_pork', '熟豬肉'),
     cooked_beef: new BlockItem('cooked_beef', '熟牛肉'),
     cooked_mutton: new BlockItem('cooked_mutton', '熟羊肉'),
-    volleyball: new BlockItem('volleyball', '排球'),
     wood_helmet: new BlockItem('wood_helmet', '木頭帽子'),
     wood_chest: new BlockItem('wood_chest', '木頭護甲'),
     wood_legs: new BlockItem('wood_legs', '木頭護腿'),
@@ -54,7 +53,6 @@ Object.keys(blockIconColors).forEach((id) => {
 });
 
 const inventory = new Inventory();
-inventory.add('volleyball', 1, false);
 const craftingManager = new CraftingManager(inventory);
 craftingManager.addRecipe(new CraftingRecipe('plank_recipe', '木頭 x1 → 木板 x4', [{ itemId: 'wood', amount: 1 }], { itemId: 'plank', amount: 4 }));
 craftingManager.addRecipe(new CraftingRecipe('rope_recipe', '樹葉 x2 → 草繩 x1', [{ itemId: 'leaf', amount: 2 }], { itemId: 'rope', amount: 1 }));
@@ -85,8 +83,6 @@ const miningProgressEl = document.getElementById('mining-progress');
 const miningProgressFillEl = document.getElementById('mining-progress-fill');
 const eatingProgressEl = document.getElementById('eating-progress');
 const eatingProgressFillEl = document.getElementById('eating-progress-fill');
-const throwProgressEl = document.getElementById('throw-progress');
-const throwProgressFillEl = document.getElementById('throw-progress-fill');
 
 let inventoryOpen = false;
 let craftingMode = 'inventory'; // inventory | table | furnace
@@ -141,8 +137,6 @@ let lastMiningSwingAt = 0;
 let eatingState = null;
 let rightMouseDown = false;
 let lastEatingSwingAt = 0;
-let throwChargeState = null;
-const volleyballProjectiles = [];
 
 const foodValues = {
     raw_pork: 3,
@@ -905,95 +899,6 @@ const dropSystem = createDropSystem({
     getPlayerFeetY: () => camera.position.y - currentHeight
 });
 
-function removeZombie(target) {
-    const index = zombies.indexOf(target);
-    if (index < 0) return false;
-    scene.remove(target);
-    zombies.splice(index, 1);
-    return true;
-}
-
-function recoverVolleyball(position) {
-    dropSystem.spawnDrop('volleyball', position.x, position.y, position.z);
-}
-
-function launchVolleyball(charge) {
-    const selectedSlot = inventory.getSlots(27, 36)[selectedIdx];
-    if (!selectedSlot || selectedSlot.itemId !== 'volleyball') return;
-    if (!inventory.remove('volleyball', 1)) return;
-
-    const direction = new THREE.Vector3();
-    camera.getWorldDirection(direction);
-    direction.normalize();
-    const ballMaterial = getMaterials('volleyball')[0];
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 8), ballMaterial);
-    ball.position.copy(camera.position).addScaledVector(direction, 0.7);
-    ball.userData.velocity = direction.multiplyScalar(8 + charge * 20);
-    ball.userData.velocity.y += 1.5 + charge * 2.5;
-    ball.userData.age = 0;
-    scene.add(ball);
-    volleyballProjectiles.push(ball);
-    renderHotbar();
-    renderHeldItemInHand();
-}
-
-function finishVolleyballProjectile(index, position) {
-    const ball = volleyballProjectiles[index];
-    if (!ball) return;
-    scene.remove(ball);
-    volleyballProjectiles.splice(index, 1);
-    recoverVolleyball(position);
-}
-
-function updateVolleyballProjectiles(dt) {
-    for (let i = volleyballProjectiles.length - 1; i >= 0; i--) {
-        const ball = volleyballProjectiles[i];
-        const previous = ball.position.clone();
-        ball.userData.age += dt;
-        ball.userData.velocity.y -= 12 * dt;
-        ball.position.addScaledVector(ball.userData.velocity, dt);
-        ball.rotation.x += dt * 9;
-        ball.rotation.z += dt * 7;
-
-        const travel = ball.position.clone().sub(previous);
-        const travelDistance = travel.length();
-        if (travelDistance > 0.0001) {
-            const raycaster = new THREE.Raycaster(previous, travel.normalize(), 0, travelDistance + 0.25);
-            const nearbyBlocks = getNearbyBlocks(ball.position.x, ball.position.z, 2);
-            if (raycaster.intersectObjects(nearbyBlocks).length > 0) {
-                finishVolleyballProjectile(i, previous);
-                continue;
-            }
-        }
-
-        let hitMob = false;
-        for (const animal of [...animalSystem.getAnimals()]) {
-            const center = animal.position.clone().add(new THREE.Vector3(0, 0.8, 0));
-            if (center.distanceToSquared(ball.position) > 0.85 * 0.85) continue;
-            const direction = ball.userData.velocity.clone().setY(0);
-            animalSystem.damageAnimal(animal, 999, direction);
-            hitMob = true;
-            break;
-        }
-        if (!hitMob) {
-            for (const zombie of [...zombies]) {
-                const center = zombie.position.clone().add(new THREE.Vector3(0, 0.9, 0));
-                if (center.distanceToSquared(ball.position) > 0.85 * 0.85) continue;
-                removeZombie(zombie);
-                hitMob = true;
-                break;
-            }
-        }
-        if (hitMob) {
-            finishVolleyballProjectile(i, ball.position.clone());
-            continue;
-        }
-        if (ball.userData.age >= 8 || ball.position.y < -20) {
-            finishVolleyballProjectile(i, ball.position.clone());
-        }
-    }
-}
-
 function posKey(x, y, z) { return `${x},${y},${z}`; }
 function colKey(x, z) { return `${x},${z}`; }
 
@@ -1257,7 +1162,6 @@ controls.addEventListener('unlock', () => {
     rightMouseDown = false;
     cancelMining();
     cancelEating();
-    cancelThrowCharge();
     if (unlockingForInventory) {
         unlockingForInventory = false;
         overlay.style.display = 'none';
@@ -1478,54 +1382,9 @@ function updateEating(dt, now) {
     if (progress >= 1) finishEating();
 }
 
-function cancelThrowCharge() {
-    throwChargeState = null;
-    throwProgressFillEl.style.width = '0%';
-    throwProgressEl.style.display = 'none';
-}
-
-function beginThrowCharge() {
-    if (selectedItemId() !== 'volleyball') return false;
-    throwChargeState = { elapsed: 0, maxDuration: 2 };
-    throwProgressFillEl.style.width = '0%';
-    throwProgressEl.style.display = 'block';
-    return true;
-}
-
-function updateThrowCharge(dt) {
-    if (!rightMouseDown || !controls.isLocked || inventoryOpen || !throwChargeState) {
-        cancelThrowCharge();
-        return;
-    }
-    if (selectedItemId() !== 'volleyball') {
-        cancelThrowCharge();
-        return;
-    }
-    throwChargeState.elapsed = Math.min(
-        throwChargeState.maxDuration,
-        throwChargeState.elapsed + dt
-    );
-    const charge = throwChargeState.elapsed / throwChargeState.maxDuration;
-    throwProgressFillEl.style.width = `${charge * 100}%`;
-}
-
-function releaseThrowCharge() {
-    if (!throwChargeState) return;
-    const charge = Math.max(
-        0.08,
-        Math.min(1, throwChargeState.elapsed / throwChargeState.maxDuration)
-    );
-    launchVolleyball(charge);
-    cancelThrowCharge();
-}
-
 window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
     playHandSwing();
-    if (e.button === 2 && selectedItemId() === 'volleyball') {
-        rightMouseDown = beginThrowCharge();
-        return;
-    }
     if (e.button === 2 && foodValues[selectedItemId()]) {
         rightMouseDown = beginEating();
         return;
@@ -1545,7 +1404,7 @@ window.addEventListener('mousedown', (e) => {
             const animal = findRootInCollection(animalHits[0].object, animalSystem.getAnimals());
             if (animal) {
                 const away = new THREE.Vector3(animal.position.x - camera.position.x, 0, animal.position.z - camera.position.z);
-                animalSystem.damageAnimal(animal, selectedItemId() === 'volleyball' ? 999 : 1, away);
+                animalSystem.damageAnimal(animal, 1, away);
                 return;
             }
         }
@@ -1558,9 +1417,10 @@ window.addEventListener('mousedown', (e) => {
             target.position.x += away.x * 1.9;
             target.position.z += away.z * 1.9;
             target.userData.velocityY = Math.max(target.userData.velocityY || 0, 4.8);
-            target.userData.health -= selectedItemId() === 'volleyball' ? 999 : 1;
+            target.userData.health -= 1;
             if (target.userData.health <= 0 && idx >= 0) {
-                removeZombie(target);
+                scene.remove(target);
+                zombies.splice(idx, 1);
             }
             return;
         }
@@ -1576,7 +1436,7 @@ window.addEventListener('mousedown', (e) => {
                     0,
                     animal.position.z - camera.position.z
                 );
-                animalSystem.damageAnimal(animal, selectedItemId() === 'volleyball' ? 999 : 1, away);
+                animalSystem.damageAnimal(animal, 1, away);
                 return;
             }
         }
@@ -1624,7 +1484,6 @@ window.addEventListener('mouseup', (e) => {
         cancelMining();
     }
     if (e.button === 2) {
-        releaseThrowCharge();
         rightMouseDown = false;
         cancelEating();
     }
@@ -1634,7 +1493,6 @@ window.addEventListener('blur', () => {
     rightMouseDown = false;
     cancelMining();
     cancelEating();
-    cancelThrowCharge();
 });
 window.addEventListener('mousemove', (e) => {
     if (!controls.isLocked || !isThirdPerson) return;
@@ -1796,8 +1654,6 @@ function animate() {
         updateZombies(dt);
         updateMining(dt, t);
         updateEating(dt, t);
-        updateThrowCharge(dt);
-        updateVolleyballProjectiles(dt);
 
         const targetH = isCrouching ? 1.2 : 1.8;
         currentHeight += (targetH - currentHeight) * 0.2;
