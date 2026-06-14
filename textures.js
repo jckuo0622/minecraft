@@ -96,6 +96,26 @@ function makeOreTexture(baseA, baseB, oreA, oreB) {
     return new THREE.CanvasTexture(canvas);
 }
 
+function makeVolleyballTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 16; canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#f4f4f4';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#3878bd';
+    ctx.fillRect(0, 0, 5, 8);
+    ctx.fillRect(5, 7, 11, 3);
+    ctx.fillStyle = '#e8c63d';
+    ctx.fillRect(10, 0, 6, 7);
+    ctx.fillRect(0, 11, 10, 5);
+    ctx.fillStyle = '#252525';
+    ctx.fillRect(5, 0, 1, 7);
+    ctx.fillRect(9, 0, 1, 7);
+    ctx.fillRect(0, 8, 16, 1);
+    ctx.fillRect(0, 10, 16, 1);
+    return new THREE.CanvasTexture(canvas);
+}
+
 // 核心繪圖邏輯：回傳一個畫好像素的 Canvas
 export function getPixelCanvas(c1, c2) {
     const canvas = document.createElement('canvas');
@@ -125,7 +145,21 @@ export function getMaterials(type) {
     if (materialCache.has(type)) return materialCache.get(type);
 
     let materials;
-    if (type === 'stone') {
+    if (type === 'volleyball') {
+        const texture = makeVolleyballTexture();
+        texture.magFilter = THREE.NearestFilter;
+        texture.minFilter = THREE.NearestFilter;
+        texture.generateMipmaps = false;
+        const mat = new THREE.MeshLambertMaterial({ map: texture });
+        materials = [mat, mat, mat, mat, mat, mat];
+    }
+    else if (['raw_pork', 'raw_beef', 'raw_mutton', 'cooked_pork', 'cooked_beef', 'cooked_mutton'].includes(type)) {
+        const cooked = type.startsWith('cooked_');
+        const colors = cooked ? ['#9b4f2e', '#6f321f'] : ['#e18d87', '#b95659'];
+        const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture(colors[0], colors[1]) });
+        materials = [mat, mat, mat, mat, mat, mat];
+    }
+    else if (type === 'stone') {
         const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('#888888', '#777777') });
         materials = [mat, mat, mat, mat, mat, mat];
     }
@@ -220,6 +254,38 @@ export function getItemIconCanvas(type) {
     const canvas = document.createElement('canvas');
     canvas.width = 16; canvas.height = 16;
     const ctx = canvas.getContext('2d');
+
+    if (type === 'volleyball') {
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(5, 1, 6, 1);
+        ctx.fillRect(2, 3, 12, 10);
+        ctx.fillRect(4, 1, 8, 14);
+        ctx.fillStyle = '#f4f4f4';
+        ctx.fillRect(5, 2, 6, 12);
+        ctx.fillRect(3, 4, 10, 8);
+        ctx.fillStyle = '#3878bd';
+        ctx.fillRect(5, 2, 2, 5);
+        ctx.fillRect(7, 7, 6, 2);
+        ctx.fillStyle = '#e8c63d';
+        ctx.fillRect(10, 3, 2, 5);
+        ctx.fillRect(4, 10, 6, 2);
+        return canvas;
+    }
+
+    if (['raw_pork', 'raw_beef', 'raw_mutton', 'cooked_pork', 'cooked_beef', 'cooked_mutton'].includes(type)) {
+        const cooked = type.startsWith('cooked_');
+        const light = cooked ? '#b76538' : '#f3a09b';
+        const dark = cooked ? '#6f321f' : '#a94148';
+        ctx.fillStyle = dark;
+        ctx.fillRect(3, 5, 10, 7);
+        ctx.fillRect(5, 3, 7, 11);
+        ctx.fillStyle = light;
+        ctx.fillRect(5, 4, 6, 7);
+        ctx.fillRect(4, 6, 8, 4);
+        ctx.fillStyle = '#f1d6bb';
+        ctx.fillRect(11, 8, 3, 2);
+        return canvas;
+    }
 
     if (type === 'furnace') {
         ctx.fillStyle = '#666666'; ctx.fillRect(0, 0, 16, 16);
@@ -355,5 +421,12 @@ export const blockIconColors = {
     iron_helmet: ['#c8c8c8', '#9f9f9f'],
     iron_chest: ['#c8c8c8', '#9f9f9f'],
     iron_legs: ['#c8c8c8', '#9f9f9f'],
-    iron_boots: ['#c8c8c8', '#9f9f9f']
+    iron_boots: ['#c8c8c8', '#9f9f9f'],
+    raw_pork: ['#f3a09b', '#a94148'],
+    raw_beef: ['#d87570', '#8f3238'],
+    raw_mutton: ['#e6aaa0', '#a44d4d'],
+    cooked_pork: ['#b76538', '#6f321f'],
+    cooked_beef: ['#98502f', '#59271b'],
+    cooked_mutton: ['#ad5a35', '#692d1d'],
+    volleyball: ['#f4f4f4', '#3878bd']
 };
