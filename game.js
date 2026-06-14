@@ -1,5 +1,5 @@
-import * as THREE from 'three';
-import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
+import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/PointerLockControls.js';
 import { getMaterials, getPixelCanvas, blockIconColors, getItemIconCanvas } from './textures.js';
 import { getGroundAt, checkWall, checkCapsuleWall } from './physics.js';
 import { BlockItem, Inventory, CraftingRecipe, CraftingManager } from './inventory.js';
@@ -726,6 +726,7 @@ scene.fog = new THREE.FogExp2(0xbfd1e5, 0.03);
 const DAY_DURATION = 10 * 60;
 const NIGHT_DURATION = 10 * 60;
 const DAY_NIGHT_CYCLE = DAY_DURATION + NIGHT_DURATION;
+const worldSeed = 1337;
 let worldTime = 90;
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
