@@ -740,7 +740,6 @@ renderer.setPixelRatio(1);
 document.getElementById('game-container').appendChild(renderer.domElement);
 
 const controls = new PointerLockControls(camera, document.body);
-const overlay = document.getElementById('overlay');
 const crosshair = document.getElementById('crosshair');
 const playButton = document.getElementById('btn-play');
 playButton?.addEventListener('click', () => {
@@ -1509,7 +1508,6 @@ renderSurvivalHud();
 
 // --- D. 控制與點擊 ---
 function showGameplayView() {
-    overlay.style.display = 'none';
     crosshair.style.display = inventoryOpen ? 'none' : 'block';
     hotbar.style.display = 'flex';
     survivalHudEl.style.display = 'flex';
@@ -1517,10 +1515,8 @@ function showGameplayView() {
     playerModel.visible = isThirdPerson;
 }
 
-const playButton = document.getElementById('btn-play');
-playButton?.addEventListener('click', () => {
-    showGameplayView();
-    controls.lock();
+renderer.domElement.addEventListener('click', () => {
+    if (!inventoryOpen && !controls.isLocked) controls.lock();
 });
 controls.addEventListener('lock', showGameplayView);
 controls.addEventListener('unlock', () => {
@@ -1531,17 +1527,15 @@ controls.addEventListener('unlock', () => {
     cancelThrowCharge();
     if (unlockingForInventory) {
         unlockingForInventory = false;
-        overlay.style.display = 'none';
         crosshair.style.display = 'none';
         hotbar.style.display = 'flex';
         survivalHudEl.style.display = 'flex';
         fpHandEl.style.display = 'none';
         return;
     }
-    overlay.style.display = 'flex';
-    crosshair.style.display = 'none';
-    hotbar.style.display = 'none';
-    survivalHudEl.style.display = 'none';
+    crosshair.style.display = 'block';
+    hotbar.style.display = 'flex';
+    survivalHudEl.style.display = 'flex';
     fpHandEl.style.display = 'none';
     playerModel.visible = false;
 });
@@ -2042,6 +2036,7 @@ function createPlayerModel() {
 
 const playerModel = createPlayerModel();
 scene.add(playerModel);
+showGameplayView();
 
 let prevT = performance.now();
 function animate() {
