@@ -742,6 +742,11 @@ document.getElementById('game-container').appendChild(renderer.domElement);
 const controls = new PointerLockControls(camera, document.body);
 const overlay = document.getElementById('overlay');
 const crosshair = document.getElementById('crosshair');
+const playButton = document.getElementById('btn-play');
+playButton?.addEventListener('click', () => {
+    overlay.style.display = 'none';
+    controls.lock();
+});
 
 // --- B. 地型與區塊系統變數 ---
 const CHUNK_SIZE = 16;
@@ -1503,8 +1508,6 @@ renderHeldItemInHand();
 renderSurvivalHud();
 
 // --- D. 控制與點擊 ---
-const playButton = document.getElementById('btn-play');
-playButton?.addEventListener('click', () => controls.lock());
 controls.addEventListener('lock', () => {
     overlay.style.display = 'none';
     crosshair.style.display = inventoryOpen ? 'none' : 'block';
