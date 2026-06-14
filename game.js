@@ -6,6 +6,8 @@ import { BlockItem, Inventory, CraftingRecipe, CraftingManager } from './invento
 import { createAnimalSystem } from './animals.js';
 import { createDropSystem } from './drops.js';
 
+const worldSeed = Math.floor(Math.random() * 2147483647);
+
 const itemDefs = {
     wood: new BlockItem('wood', '木頭'),
     sand: new BlockItem('sand', '沙子'),
@@ -92,12 +94,6 @@ let craftSlots = Array.from({ length: 4 }, () => null);
 let activeFurnaceKey = null;
 const furnaceStates = new Map();
 const equipment = { helmet: null, chest: null, legs: null, boots: null };
-if (loadedSave) {
-    for (const slot of Object.keys(equipment)) {
-        const item = loadedSave.equipment[slot];
-        equipment[slot] = item && typeof item.itemId === 'string' ? { itemId: item.itemId } : null;
-    }
-}
 let selectedIdx = 0;
 let isThirdPerson = false;
 let lastViewToggleAt = 0;
@@ -748,7 +744,6 @@ const blockByPos = new Map();
 const columnIndex = new Map();
 const removedBlocks = new Set(); // 儲存被挖掉的座標 "x,y,z"
 const placedBlocks = new Map(); // 玩家放置的方塊，座標字串 -> 方塊類型
-if (loadedSave) applyWorldChanges(loadedSave, removedBlocks, placedBlocks);
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const worldWorker = new Worker('./worldWorker.js', { type: 'module' });
 const pendingChunks = new Set();
@@ -1548,7 +1543,7 @@ scene.add(ambientLight);
 const sun = new THREE.DirectionalLight(0xffffff, 0.6);
 sun.position.set(10, 20, 10);
 scene.add(sun);
-const initialPlayerPosition = loadedSave?.player.position ?? { x: 0, y: 30, z: 0 };
+const initialPlayerPosition = { x: 0, y: 30, z: 0 };
 camera.position.set(initialPlayerPosition.x, initialPlayerPosition.y, initialPlayerPosition.z);
 
 const playerAnchor = new THREE.Vector3(
