@@ -27,6 +27,31 @@
         <div class="fp-held-item" id="fp-held-item"></div>
     </div>
 
+    <div id="overlay">
+        <main id="menu" aria-labelledby="game-title">
+            <header class="menu-logo">
+                <h1 id="game-title" aria-label="Minecraft">
+                    <span class="logo-main">MINECRAFT</span>
+                    <span class="logo-edition">WEB EDITION</span>
+                </h1>
+            </header>
+
+            <div class="menu-actions">
+                <button id="btn-play" type="button">開始遊戲</button>
+                <div class="menu-secondary-actions" aria-hidden="true">
+                    <span class="menu-button-placeholder">多人遊戲</span>
+                    <span class="menu-button-placeholder">Minecraft Realms</span>
+                </div>
+            </div>
+
+        </main>
+
+        <footer class="menu-footer">
+            <span>Minecraft Web Edition 1.0</span>
+            <span>非官方 Three.js 致敬作品</span>
+        </footer>
+    </div>
+
     <div id="inventory-panel" class="mc-inventory">
         <div class="mc-panel-wrap">
             <div class="mc-panel">
@@ -83,14 +108,6 @@
         </div>
     </div>
 
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://cdn.jsdelivr.net/npm/three@0.136.0/build/three.module.js",
-                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.136.0/examples/jsm/"
-            }
-        }
-    </script>
-    <script type="module" src="game.js?v=world-start-16"></script>
+    <script type="module" src="game.js"></script>
 </body>
 </html>
