@@ -1076,30 +1076,20 @@ function getSurfaceHeightApprox(x, z) {
     return Math.round(mountain + hills + detail);
 }
 
-// 核心：補洞邏輯
+// 挖掘原始地形後只補出正下方的石頭，避免每次挖掘向六面擴張出石頭群。
 function updateNeighbors(x, y, z) {
-    const directions = [
-        [1, 0, 0], [-1, 0, 0],
-        [0, 1, 0], [0, -1, 0],
-        [0, 0, 1], [0, 0, -1]
-    ];
+    const nx = Math.round(x);
+    const ny = Math.round(y) - 1;
+    const nz = Math.round(z);
+    const neighborKey = posKey(nx, ny, nz);
+    if (removedBlocks.has(neighborKey) || placedBlocks.has(neighborKey)) return;
+    if (ny > getSurfaceHeightApprox(nx, nz) || ny < -20) return;
+    if (blockByPos.has(neighborKey)) return;
 
-    directions.forEach(([dx, dy, dz]) => {
-        const nx = x + dx, ny = y + dy, nz = z + dz;
-        const neighborKey = `${nx},${ny},${nz}`;
-
-        if (removedBlocks.has(neighborKey)) return; // 挖掉的地方不補
-        if (ny > getSurfaceHeightApprox(nx, nz) || ny < -20) return; // 限制高度與地底深度
-
-        const exists = blockByPos.has(posKey(nx, ny, nz));
-
-        if (!exists) {
-            const m = new THREE.Mesh(boxGeo, getMaterials('stone'));
-            m.userData.blockType = 'stone';
-            m.position.set(nx, ny, nz);
-            addBlockMesh(m);
-        }
-    });
+    const m = new THREE.Mesh(boxGeo, getMaterials('stone'));
+    m.userData.blockType = 'stone';
+    m.position.set(nx, ny, nz);
+    addBlockMesh(m);
     renderHeldItemInHand();
 }
 
@@ -1122,6 +1112,7 @@ worldWorker.onmessage = (event) => {
     const { type, key, blocks: blockData } = event.data;
     if (type !== 'chunk_generated') return;
     pendingChunks.delete(key);
+    if (loadedChunks.has(key) || chunkBuildQueue.some(chunk => chunk.key === key)) return;
     chunkBuildQueue.push({ key, blockData });
 };
 
@@ -1136,8 +1127,17 @@ function flushChunkBuildQueue(maxChunksPerFrame = 1) {
             const m = new THREE.Mesh(boxGeo, getMaterials(data.type));
             m.userData.blockType = data.type;
             m.position.set(data.x, data.y, data.z);
-            addBlockMesh(m);
-            chunkBlocks.push(m);
+            if (addBlockMesh(m)) chunkBlocks.push(m);
+        }
+        const [cx, cz] = key.split(',').map(Number);
+        for (const [positionKey, blockType] of placedBlocks) {
+            const [x, y, z] = positionKey.split(',').map(Number);
+            if (Math.floor(x / CHUNK_SIZE) !== cx || Math.floor(z / CHUNK_SIZE) !== cz) continue;
+            const m = new THREE.Mesh(boxGeo, getMaterials(blockType));
+            m.userData.blockType = blockType;
+            m.userData.playerPlaced = true;
+            m.position.set(x, y, z);
+            if (addBlockMesh(m)) chunkBlocks.push(m);
         }
         const [cx, cz] = key.split(',').map(Number);
         for (const [positionKey, blockType] of placedBlocks) {
@@ -1406,12 +1406,18 @@ function finishMining(mesh) {
     const pos = mesh.position.clone();
     const blockType = mesh.userData.blockType || 'stone';
     const key = posKey(Math.round(pos.x), Math.round(pos.y), Math.round(pos.z));
-    placedBlocks.delete(key);
-    removedBlocks.add(key);
+    const wasPlayerPlaced = mesh.userData.playerPlaced === true || placedBlocks.has(key);
+    if (wasPlayerPlaced) {
+        placedBlocks.delete(key);
+        removedBlocks.delete(key);
+    } else {
+        placedBlocks.delete(key);
+        removedBlocks.add(key);
+    }
     markSaveDirty();
     dropSystem.spawnDrop(blockType, pos.x, pos.y, pos.z);
     removeBlockMesh(mesh);
-    updateNeighbors(pos.x, pos.y, pos.z);
+    if (!wasPlayerPlaced) updateNeighbors(pos.x, pos.y, pos.z);
     addExhaustion(0.08);
     cancelMining();
 }
@@ -1638,6 +1644,7 @@ window.addEventListener('mousedown', (e) => {
             b.userData.playerPlaced = true;
             if (addBlockMesh(b)) {
                 placedBlocks.set(key, selectedSlot.itemId);
+                removedBlocks.delete(key);
                 markSaveDirty();
             }
         }

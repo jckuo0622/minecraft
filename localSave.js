@@ -71,8 +71,9 @@ export function deserializeInventory(inventory, slots) {
 }
 
 export function serializeWorldChanges(removedBlocks, placedBlocks) {
+    const normalizedRemoved = Array.from(removedBlocks).filter(key => !placedBlocks.has(key));
     return {
-        removedBlocks: Array.from(removedBlocks),
+        removedBlocks: normalizedRemoved,
         placedBlocks: Array.from(placedBlocks, ([key, type]) => {
             const [x, y, z] = key.split(',').map(Number);
             return { x, y, z, type };
@@ -85,7 +86,9 @@ export function applyWorldChanges(data, removedBlocks, placedBlocks) {
     placedBlocks.clear();
     for (const key of data.removedBlocks) removedBlocks.add(key);
     for (const block of data.placedBlocks) {
-        placedBlocks.set(`${block.x},${block.y},${block.z}`, block.type);
+        const key = `${block.x},${block.y},${block.z}`;
+        placedBlocks.set(key, block.type);
+        removedBlocks.delete(key);
     }
 }
 
