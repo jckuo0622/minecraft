@@ -1,11 +1,10 @@
-import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
-import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/PointerLockControls.js';
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { getMaterials, getPixelCanvas, blockIconColors, getItemIconCanvas } from './textures.js';
 import { getGroundAt, checkWall, checkCapsuleWall } from './physics.js';
 import { BlockItem, Inventory, CraftingRecipe, CraftingManager } from './inventory.js';
 import { createAnimalSystem } from './animals.js';
 import { createDropSystem } from './drops.js';
-
 
 const itemDefs = {
     wood: new BlockItem('wood', '木頭'),
@@ -30,6 +29,13 @@ const itemDefs = {
     coal_ore: new BlockItem('coal_ore', '煤礦'),
     iron_ore: new BlockItem('iron_ore', '鐵礦'),
     iron: new BlockItem('iron', '鐵錠'),
+    raw_pork: new BlockItem('raw_pork', '生豬肉'),
+    raw_beef: new BlockItem('raw_beef', '生牛肉'),
+    raw_mutton: new BlockItem('raw_mutton', '生羊肉'),
+    cooked_pork: new BlockItem('cooked_pork', '熟豬肉'),
+    cooked_beef: new BlockItem('cooked_beef', '熟牛肉'),
+    cooked_mutton: new BlockItem('cooked_mutton', '熟羊肉'),
+    volleyball: new BlockItem('volleyball', '排球'),
     wood_helmet: new BlockItem('wood_helmet', '木頭帽子'),
     wood_chest: new BlockItem('wood_chest', '木頭護甲'),
     wood_legs: new BlockItem('wood_legs', '木頭護腿'),
@@ -48,6 +54,7 @@ Object.keys(blockIconColors).forEach((id) => {
 });
 
 const inventory = new Inventory();
+inventory.add('volleyball', 1, false);
 const craftingManager = new CraftingManager(inventory);
 craftingManager.addRecipe(new CraftingRecipe('plank_recipe', '木頭 x1 → 木板 x4', [{ itemId: 'wood', amount: 1 }], { itemId: 'plank', amount: 4 }));
 craftingManager.addRecipe(new CraftingRecipe('rope_recipe', '樹葉 x2 → 草繩 x1', [{ itemId: 'leaf', amount: 2 }], { itemId: 'rope', amount: 1 }));
@@ -71,6 +78,15 @@ const furnaceOutputEl = document.getElementById('furnace-output');
 const furnaceProgressFillEl = document.getElementById('furnace-progress-fill');
 const fpHandEl = document.getElementById('first-person-hand');
 const fpHeldItemEl = document.getElementById('fp-held-item');
+const survivalHudEl = document.getElementById('survival-hud');
+const healthBarEl = document.getElementById('health-bar');
+const hungerBarEl = document.getElementById('hunger-bar');
+const miningProgressEl = document.getElementById('mining-progress');
+const miningProgressFillEl = document.getElementById('mining-progress-fill');
+const eatingProgressEl = document.getElementById('eating-progress');
+const eatingProgressFillEl = document.getElementById('eating-progress-fill');
+const throwProgressEl = document.getElementById('throw-progress');
+const throwProgressFillEl = document.getElementById('throw-progress-fill');
 
 let inventoryOpen = false;
 let craftingMode = 'inventory'; // inventory | table | furnace
@@ -85,6 +101,164 @@ let isThirdPerson = false;
 let lastViewToggleAt = 0;
 let thirdPersonYaw = 0;
 let thirdPersonPitch = -0.2;
+
+const MAX_HEALTH = 20;
+const MAX_HUNGER = 20;
+let playerHealth = MAX_HEALTH;
+let playerHunger = MAX_HUNGER;
+let hungerExhaustion = 0;
+let survivalTick = 0;
+let regenerationTick = 0;
+let starvationTick = 0;
+let damageCooldown = 0;
+let wasAirborne = false;
+let peakFallSpeed = 0;
+let ignoreFallDamageUntilGround = true;
+
+const blockMiningRules = {
+    leaf: { hardness: 0.25, tool: 'axe' },
+    sand: { hardness: 0.4, tool: 'shovel' },
+    grass: { hardness: 0.65, tool: 'shovel' },
+    wood: { hardness: 1.5, tool: 'axe' },
+    plank: { hardness: 1.2, tool: 'axe' },
+    crafting_table: { hardness: 1.8, tool: 'axe' },
+    stone: { hardness: 2.8, tool: 'pickaxe' },
+    sandstone: { hardness: 2.2, tool: 'pickaxe' },
+    coal_ore: { hardness: 3.2, tool: 'pickaxe' },
+    iron_ore: { hardness: 4.2, tool: 'pickaxe' },
+    furnace: { hardness: 3.5, tool: 'pickaxe' }
+};
+
+let miningState = null;
+let leftMouseDown = false;
+let lastMiningSwingAt = 0;
+let eatingState = null;
+let rightMouseDown = false;
+let lastEatingSwingAt = 0;
+let throwChargeState = null;
+const volleyballProjectiles = [];
+
+const foodValues = {
+    raw_pork: 3,
+    raw_beef: 3,
+    raw_mutton: 2,
+    cooked_pork: 8,
+    cooked_beef: 8,
+    cooked_mutton: 6
+};
+
+function renderStatusRow(container, value, iconClass) {
+    container.innerHTML = '';
+    for (let i = 0; i < 10; i++) {
+        const icon = document.createElement('span');
+        const remaining = value - i * 2;
+        icon.className = `status-icon ${iconClass}`;
+        if (remaining <= 0) icon.classList.add('empty');
+        else if (remaining === 1) icon.classList.add('half');
+        container.appendChild(icon);
+    }
+}
+
+function renderSurvivalHud() {
+    renderStatusRow(healthBarEl, playerHealth, 'health-icon');
+    renderStatusRow(hungerBarEl, playerHunger, 'hunger-icon');
+    healthBarEl.setAttribute('aria-label', `生命值 ${playerHealth} / ${MAX_HEALTH}`);
+    hungerBarEl.setAttribute('aria-label', `飢餓值 ${playerHunger} / ${MAX_HUNGER}`);
+}
+
+function armorPoints() {
+    const values = {
+        wood_helmet: 1, wood_chest: 2, wood_legs: 2, wood_boots: 1,
+        iron_helmet: 2, iron_chest: 5, iron_legs: 4, iron_boots: 2
+    };
+    return Object.values(equipment).reduce((sum, item) => sum + (values[item?.itemId] || 0), 0);
+}
+
+function damagePlayer(amount, source = 'generic', ignoreArmor = false) {
+    if (amount <= 0 || playerHealth <= 0 || damageCooldown > 0) return;
+    const reduction = ignoreArmor ? 0 : Math.min(0.6, armorPoints() * 0.04);
+    const damage = Math.max(1, Math.ceil(amount * (1 - reduction)));
+    playerHealth = Math.max(0, playerHealth - damage);
+    damageCooldown = source === 'starvation' ? 0.35 : 0.65;
+    renderSurvivalHud();
+    document.body.classList.remove('damage-flash');
+    void document.body.offsetWidth;
+    document.body.classList.add('damage-flash');
+    if (playerHealth <= 0) respawnPlayer();
+}
+
+function respawnPlayer() {
+    playerHealth = MAX_HEALTH;
+    playerHunger = MAX_HUNGER;
+    hungerExhaustion = 0;
+    velocity.set(0, 0, 0);
+    camera.position.set(0, 30, 0);
+    playerAnchor.set(0, 30, 0);
+    ignoreFallDamageUntilGround = true;
+    wasAirborne = false;
+    peakFallSpeed = 0;
+    miningState = null;
+    miningProgressEl.style.display = 'none';
+    cancelEating();
+    renderSurvivalHud();
+}
+
+function addExhaustion(amount) {
+    hungerExhaustion += amount;
+    while (hungerExhaustion >= 4 && playerHunger > 0) {
+        hungerExhaustion -= 4;
+        playerHunger--;
+        renderSurvivalHud();
+    }
+}
+
+function updateSurvival(dt, horizontalSpeed) {
+    damageCooldown = Math.max(0, damageCooldown - dt);
+    survivalTick += dt;
+    addExhaustion(dt * 0.015 + horizontalSpeed * dt * (isCrouching ? 0.003 : 0.007));
+
+    if (playerHunger >= 18 && playerHealth < MAX_HEALTH) {
+        regenerationTick += dt;
+        if (regenerationTick >= 4) {
+            regenerationTick = 0;
+            playerHealth++;
+            addExhaustion(1.5);
+            renderSurvivalHud();
+        }
+    } else {
+        regenerationTick = 0;
+    }
+
+    if (playerHunger <= 0) {
+        starvationTick += dt;
+        if (starvationTick >= 4) {
+            starvationTick = 0;
+            damagePlayer(1, 'starvation', true);
+        }
+    } else {
+        starvationTick = 0;
+    }
+
+    if (survivalTick >= 30) {
+        survivalTick = 0;
+        addExhaustion(0.25);
+    }
+}
+
+function selectedItemId() {
+    return inventory.getSlots(27, 36)[selectedIdx]?.itemId || null;
+}
+
+function miningDuration(blockType) {
+    const rule = blockMiningRules[blockType] || { hardness: 2, tool: null };
+    const itemId = selectedItemId() || '';
+    const toolType = itemId.includes('pickaxe') ? 'pickaxe' : itemId.includes('axe') ? 'axe' : null;
+    const tier = itemId.startsWith('iron_') ? 3 : itemId.startsWith('stone_') ? 2 : itemId.startsWith('wood_') ? 1 : 0;
+    let speed = 1;
+    if (rule.tool && toolType === rule.tool) speed = 2.2 + tier * 1.35;
+    else if (toolType) speed = 0.8;
+    return Math.max(0.18, rule.hardness * 0.75 / speed);
+}
 
 
 function setCraftMode(mode) {
@@ -119,12 +293,23 @@ function fuelTime(itemId) {
 function smeltResult(itemId) {
     if (itemId === 'wood') return 'coal_ore';
     if (itemId === 'iron_ore') return 'iron';
+    if (itemId === 'raw_pork') return 'cooked_pork';
+    if (itemId === 'raw_beef') return 'cooked_beef';
+    if (itemId === 'raw_mutton') return 'cooked_mutton';
     return null;
 }
 
 function renderFurnaceSlot(el, slot) {
-    if (!slot) { el.innerHTML = ''; return; }
-    el.innerHTML = `<div class="mc-item-icon" style="background-image:url(${itemIconDataUrl[slot.itemId] || ''})"></div><span style="position:absolute;right:4px;bottom:2px;color:white;font-size:10px;">x${slot.count}</span>`;
+    if (!slot) {
+        el.innerHTML = '';
+        el.removeAttribute('title');
+        return;
+    }
+    el.innerHTML = `
+        <div class="mc-item-icon furnace-item-icon" style="background-image:url(${itemIconDataUrl[slot.itemId] || ''})"></div>
+        <span class="furnace-item-count">x${slot.count}</span>
+    `;
+    el.title = itemDefs[slot.itemId]?.nameZh || slot.itemId;
 }
 
 
@@ -537,6 +722,10 @@ function toggleInventory(mode = 'inventory') {
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xbfd1e5);
 scene.fog = new THREE.FogExp2(0xbfd1e5, 0.03); 
+const DAY_DURATION = 10 * 60;
+const NIGHT_DURATION = 10 * 60;
+const DAY_NIGHT_CYCLE = DAY_DURATION + NIGHT_DURATION;
+let worldTime = 90;
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -545,7 +734,6 @@ renderer.setPixelRatio(1);
 document.getElementById('game-container').appendChild(renderer.domElement);
 
 const controls = new PointerLockControls(camera, document.body);
-const overlay = document.getElementById('overlay');
 const crosshair = document.getElementById('crosshair');
 
 // --- B. 地型與區塊系統變數 ---
@@ -564,7 +752,13 @@ const animalSystem = createAnimalSystem({
     scene,
     camera,
     getNearbyBlocks,
-    getSurfaceHeightApprox
+    getSurfaceHeightApprox,
+    onAnimalDeath: (itemId, position) => {
+        const amount = 1 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < amount; i++) {
+            dropSystem.spawnDrop(itemId, position.x, position.y + i * 0.08, position.z);
+        }
+    }
 });
 
 const zombies = [];
@@ -621,11 +815,11 @@ function updateZombies(dt) {
         const d = z.userData;
         d.hitCooldown = Math.max(0, d.hitCooldown - dt);
         const toPlayer = new THREE.Vector3(camera.position.x - z.position.x, 0, camera.position.z - z.position.z);
-        const dist = toPlayer.length();
-        if (dist > 0.001) toPlayer.normalize();
+        const horizontalDist = toPlayer.length();
+        if (horizontalDist > 0.001) toPlayer.normalize();
         const speed = 1.8;
         const minPlayerGap = 1.05;
-        const chaseDist = Math.max(0, dist - minPlayerGap);
+        const chaseDist = Math.max(0, horizontalDist - minPlayerGap);
         const step = Math.min(chaseDist, speed * dt);
         const nx = z.position.x + toPlayer.x * step;
         const nz = z.position.z + toPlayer.z * step;
@@ -662,8 +856,17 @@ function updateZombies(dt) {
         d.arms[1].rotation.x = Math.sin(d.phase) * 0.35;
         z.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
 
-        if (dist < 1.4 && d.hitCooldown <= 0) {
+        const playerCenterY = camera.position.y - currentHeight * 0.5;
+        const zombieCenterY = z.position.y + 0.9;
+        const verticalDist = playerCenterY - zombieCenterY;
+        const attackDistance = Math.hypot(
+            camera.position.x - z.position.x,
+            verticalDist,
+            camera.position.z - z.position.z
+        );
+        if (attackDistance < 1.55 && d.hitCooldown <= 0) {
             d.hitCooldown = 0.9;
+            damagePlayer(3, 'zombie');
             velocity.x += toPlayer.x * 11.5;
             velocity.z += toPlayer.z * 11.5;
             velocity.y += 5.2;
@@ -689,6 +892,95 @@ const dropSystem = createDropSystem({
     },
     getPlayerFeetY: () => camera.position.y - currentHeight
 });
+
+function removeZombie(target) {
+    const index = zombies.indexOf(target);
+    if (index < 0) return false;
+    scene.remove(target);
+    zombies.splice(index, 1);
+    return true;
+}
+
+function recoverVolleyball(position) {
+    dropSystem.spawnDrop('volleyball', position.x, position.y, position.z);
+}
+
+function launchVolleyball(charge) {
+    const selectedSlot = inventory.getSlots(27, 36)[selectedIdx];
+    if (!selectedSlot || selectedSlot.itemId !== 'volleyball') return;
+    if (!inventory.remove('volleyball', 1)) return;
+
+    const direction = new THREE.Vector3();
+    camera.getWorldDirection(direction);
+    direction.normalize();
+    const ballMaterial = getMaterials('volleyball')[0];
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 8), ballMaterial);
+    ball.position.copy(camera.position).addScaledVector(direction, 0.7);
+    ball.userData.velocity = direction.multiplyScalar(8 + charge * 20);
+    ball.userData.velocity.y += 1.5 + charge * 2.5;
+    ball.userData.age = 0;
+    scene.add(ball);
+    volleyballProjectiles.push(ball);
+    renderHotbar();
+    renderHeldItemInHand();
+}
+
+function finishVolleyballProjectile(index, position) {
+    const ball = volleyballProjectiles[index];
+    if (!ball) return;
+    scene.remove(ball);
+    volleyballProjectiles.splice(index, 1);
+    recoverVolleyball(position);
+}
+
+function updateVolleyballProjectiles(dt) {
+    for (let i = volleyballProjectiles.length - 1; i >= 0; i--) {
+        const ball = volleyballProjectiles[i];
+        const previous = ball.position.clone();
+        ball.userData.age += dt;
+        ball.userData.velocity.y -= 12 * dt;
+        ball.position.addScaledVector(ball.userData.velocity, dt);
+        ball.rotation.x += dt * 9;
+        ball.rotation.z += dt * 7;
+
+        const travel = ball.position.clone().sub(previous);
+        const travelDistance = travel.length();
+        if (travelDistance > 0.0001) {
+            const raycaster = new THREE.Raycaster(previous, travel.normalize(), 0, travelDistance + 0.25);
+            const nearbyBlocks = getNearbyBlocks(ball.position.x, ball.position.z, 2);
+            if (raycaster.intersectObjects(nearbyBlocks).length > 0) {
+                finishVolleyballProjectile(i, previous);
+                continue;
+            }
+        }
+
+        let hitMob = false;
+        for (const animal of [...animalSystem.getAnimals()]) {
+            const center = animal.position.clone().add(new THREE.Vector3(0, 0.8, 0));
+            if (center.distanceToSquared(ball.position) > 0.85 * 0.85) continue;
+            const direction = ball.userData.velocity.clone().setY(0);
+            animalSystem.damageAnimal(animal, 999, direction);
+            hitMob = true;
+            break;
+        }
+        if (!hitMob) {
+            for (const zombie of [...zombies]) {
+                const center = zombie.position.clone().add(new THREE.Vector3(0, 0.9, 0));
+                if (center.distanceToSquared(ball.position) > 0.85 * 0.85) continue;
+                removeZombie(zombie);
+                hitMob = true;
+                break;
+            }
+        }
+        if (hitMob) {
+            finishVolleyballProjectile(i, ball.position.clone());
+            continue;
+        }
+        if (ball.userData.age >= 8 || ball.position.y < -20) {
+            finishVolleyballProjectile(i, ball.position.clone());
+        }
+    }
+}
 
 function posKey(x, y, z) { return `${x},${y},${z}`; }
 function colKey(x, z) { return `${x},${z}`; }
@@ -763,17 +1055,14 @@ function updateNeighbors(x, y, z) {
         const nx = x + dx, ny = y + dy, nz = z + dz;
         const neighborKey = `${nx},${ny},${nz}`;
 
-        if (removedBlocks.has(neighborKey)) return; // 挖掉的地方不補
-        if (ny > getSurfaceHeightApprox(nx, nz) || ny < -20) return; // 限制高度與地底深度
+        if (removedBlocks.has(neighborKey)) return;
+        if (ny > getSurfaceHeightApprox(nx, nz) || ny < -20) return;
+        if (blockByPos.has(posKey(nx, ny, nz))) return;
 
-        const exists = blockByPos.has(posKey(nx, ny, nz));
-
-        if (!exists) {
-            const m = new THREE.Mesh(boxGeo, getMaterials('stone'));
-            m.userData.blockType = 'stone';
-            m.position.set(nx, ny, nz);
-            addBlockMesh(m);
-        }
+        const m = new THREE.Mesh(boxGeo, getMaterials('stone'));
+        m.userData.blockType = 'stone';
+        m.position.set(nx, ny, nz);
+        addBlockMesh(m);
     });
     renderHeldItemInHand();
 }
@@ -924,28 +1213,38 @@ renderHotbar();
 renderEquipment();
 updateSelection(0);
 renderHeldItemInHand();
+renderSurvivalHud();
 
 // --- D. 控制與點擊 ---
-document.getElementById('btn-play').addEventListener('click', () => controls.lock());
-controls.addEventListener('lock', () => {
-    overlay.style.display = 'none';
+function showGameplayView() {
     crosshair.style.display = inventoryOpen ? 'none' : 'block';
     hotbar.style.display = 'flex';
+    survivalHudEl.style.display = 'flex';
     fpHandEl.style.display = (inventoryOpen || isThirdPerson) ? 'none' : 'block';
     playerModel.visible = isThirdPerson;
+}
+
+renderer.domElement.addEventListener('click', () => {
+    if (!inventoryOpen && !controls.isLocked) controls.lock();
 });
+controls.addEventListener('lock', showGameplayView);
 controls.addEventListener('unlock', () => {
+    leftMouseDown = false;
+    rightMouseDown = false;
+    cancelMining();
+    cancelEating();
+    cancelThrowCharge();
     if (unlockingForInventory) {
         unlockingForInventory = false;
-        overlay.style.display = 'none';
         crosshair.style.display = 'none';
         hotbar.style.display = 'flex';
+        survivalHudEl.style.display = 'flex';
         fpHandEl.style.display = 'none';
         return;
     }
-    overlay.style.display = 'flex';
-    crosshair.style.display = 'none';
-    hotbar.style.display = 'none';
+    crosshair.style.display = 'block';
+    hotbar.style.display = 'flex';
+    survivalHudEl.style.display = 'flex';
     fpHandEl.style.display = 'none';
     playerModel.visible = false;
 });
@@ -995,7 +1294,11 @@ document.addEventListener('keydown', (e) => {
         const feetY = isThirdPerson ? playerAnchor.y : (camera.position.y - currentHeight);
         const near = getNearbyBlocks(px, pz, 2);
         const blockedHead = checkCapsuleWall(px, feetY + 0.05, pz, near, playerRadius, currentHeight + 0.2);
-        if (!blockedHead) { velocity.y += 9.5; canJump = false; }
+        if (!blockedHead) {
+            velocity.y += 9.5;
+            canJump = false;
+            addExhaustion(0.35);
+        }
     }
     if (e.shiftKey) isCrouching = true;
 });
@@ -1009,15 +1312,217 @@ window.addEventListener('wheel', (e) => {
     updateSelection(selectedIdx);
 }, { passive: true });
 
+function getCenterRayHits() {
+    const raycaster = new THREE.Raycaster();
+    raycaster.far = 5;
+    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+    const interactableBlocks = getNearbyBlocks(camera.position.x, camera.position.z, 5);
+    return {
+        blocks: raycaster.intersectObjects(interactableBlocks),
+        zombies: raycaster.intersectObjects(zombies, true),
+        animals: raycaster.intersectObjects(animalSystem.getAnimals(), true)
+    };
+}
+
+function findRootInCollection(object, collection) {
+    let current = object;
+    while (current) {
+        if (collection.includes(current)) return current;
+        current = current.parent;
+    }
+    return null;
+}
+
+function cancelMining() {
+    miningState = null;
+    miningProgressFillEl.style.width = '0%';
+    miningProgressEl.style.display = 'none';
+}
+
+function beginMining(mesh) {
+    miningState = {
+        mesh,
+        key: posKey(Math.round(mesh.position.x), Math.round(mesh.position.y), Math.round(mesh.position.z)),
+        elapsed: 0,
+        duration: miningDuration(mesh.userData.blockType || 'stone')
+    };
+    miningProgressFillEl.style.width = '0%';
+    miningProgressEl.style.display = 'block';
+}
+
+function finishMining(mesh) {
+    if (!mesh || !blocks.includes(mesh)) {
+        cancelMining();
+        return;
+    }
+    const pos = mesh.position.clone();
+    const blockType = mesh.userData.blockType || 'stone';
+    removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
+    dropSystem.spawnDrop(blockType, pos.x, pos.y, pos.z);
+    removeBlockMesh(mesh);
+    updateNeighbors(pos.x, pos.y, pos.z);
+    addExhaustion(0.08);
+    cancelMining();
+}
+
+function updateMining(dt, now) {
+    if (!leftMouseDown || !controls.isLocked || inventoryOpen) {
+        cancelMining();
+        return;
+    }
+    const hits = getCenterRayHits();
+    if (hits.zombies.length > 0 && (!hits.blocks.length || hits.zombies[0].distance < hits.blocks[0].distance)) {
+        cancelMining();
+        return;
+    }
+    if (hits.animals.length > 0 && (!hits.blocks.length || hits.animals[0].distance < hits.blocks[0].distance)) {
+        cancelMining();
+        return;
+    }
+    const target = hits.blocks[0]?.object;
+    if (!target) {
+        cancelMining();
+        return;
+    }
+    const key = posKey(Math.round(target.position.x), Math.round(target.position.y), Math.round(target.position.z));
+    if (!miningState || miningState.key !== key) beginMining(target);
+    miningState.elapsed += dt;
+    miningState.duration = miningDuration(target.userData.blockType || 'stone');
+    const progress = Math.min(1, miningState.elapsed / miningState.duration);
+    miningProgressFillEl.style.width = `${progress * 100}%`;
+    if (now - lastMiningSwingAt > 260) {
+        lastMiningSwingAt = now;
+        playHandSwing();
+    }
+    if (progress >= 1) finishMining(target);
+}
+
+function cancelEating() {
+    eatingState = null;
+    eatingProgressFillEl.style.width = '0%';
+    eatingProgressEl.style.display = 'none';
+}
+
+function beginEating() {
+    const itemId = selectedItemId();
+    if (!foodValues[itemId] || playerHunger >= MAX_HUNGER) return false;
+    eatingState = { itemId, elapsed: 0, duration: 1.45 };
+    eatingProgressFillEl.style.width = '0%';
+    eatingProgressEl.style.display = 'block';
+    return true;
+}
+
+function finishEating() {
+    if (!eatingState) return;
+    const selectedSlot = inventory.getSlots(27, 36)[selectedIdx];
+    if (!selectedSlot || selectedSlot.itemId !== eatingState.itemId) {
+        cancelEating();
+        return;
+    }
+    const foodValue = foodValues[eatingState.itemId] || 0;
+    if (foodValue <= 0 || playerHunger >= MAX_HUNGER) {
+        cancelEating();
+        return;
+    }
+    inventory.remove(eatingState.itemId, 1);
+    playerHunger = Math.min(MAX_HUNGER, playerHunger + foodValue);
+    hungerExhaustion = Math.max(0, hungerExhaustion - 1);
+    renderSurvivalHud();
+    renderHotbar();
+    if (inventoryOpen) renderInventory();
+    cancelEating();
+}
+
+function updateEating(dt, now) {
+    if (!rightMouseDown || !controls.isLocked || inventoryOpen || !eatingState) {
+        cancelEating();
+        return;
+    }
+    if (selectedItemId() !== eatingState.itemId || playerHunger >= MAX_HUNGER) {
+        cancelEating();
+        return;
+    }
+    eatingState.elapsed += dt;
+    const progress = Math.min(1, eatingState.elapsed / eatingState.duration);
+    eatingProgressFillEl.style.width = `${progress * 100}%`;
+    if (now - lastEatingSwingAt > 220) {
+        lastEatingSwingAt = now;
+        playHandSwing();
+    }
+    if (progress >= 1) finishEating();
+}
+
+function cancelThrowCharge() {
+    throwChargeState = null;
+    throwProgressFillEl.style.width = '0%';
+    throwProgressEl.style.display = 'none';
+}
+
+function beginThrowCharge() {
+    if (selectedItemId() !== 'volleyball') return false;
+    throwChargeState = { elapsed: 0, maxDuration: 2 };
+    throwProgressFillEl.style.width = '0%';
+    throwProgressEl.style.display = 'block';
+    return true;
+}
+
+function updateThrowCharge(dt) {
+    if (!rightMouseDown || !controls.isLocked || inventoryOpen || !throwChargeState) {
+        cancelThrowCharge();
+        return;
+    }
+    if (selectedItemId() !== 'volleyball') {
+        cancelThrowCharge();
+        return;
+    }
+    throwChargeState.elapsed = Math.min(
+        throwChargeState.maxDuration,
+        throwChargeState.elapsed + dt
+    );
+    const charge = throwChargeState.elapsed / throwChargeState.maxDuration;
+    throwProgressFillEl.style.width = `${charge * 100}%`;
+}
+
+function releaseThrowCharge() {
+    if (!throwChargeState) return;
+    const charge = Math.max(
+        0.08,
+        Math.min(1, throwChargeState.elapsed / throwChargeState.maxDuration)
+    );
+    launchVolleyball(charge);
+    cancelThrowCharge();
+}
+
 window.addEventListener('mousedown', (e) => {
     if (!controls.isLocked) return;
     playHandSwing();
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-    const interactableBlocks = getNearbyBlocks(camera.position.x, camera.position.z, 4);
-    const intersects = raycaster.intersectObjects(interactableBlocks);
-    const zombieHits = raycaster.intersectObjects(zombies, true);
+    if (e.button === 2 && selectedItemId() === 'volleyball') {
+        rightMouseDown = beginThrowCharge();
+        return;
+    }
+    if (e.button === 2 && foodValues[selectedItemId()]) {
+        rightMouseDown = beginEating();
+        return;
+    }
+    const hits = getCenterRayHits();
+    const intersects = hits.blocks;
+    const zombieHits = hits.zombies;
+    const animalHits = hits.animals;
     if (zombieHits.length > 0 && e.button === 0) {
+        const nearestAnimalDistance = animalHits[0]?.distance ?? Infinity;
+        if (intersects.length > 0 && intersects[0].distance < zombieHits[0].distance && intersects[0].distance < nearestAnimalDistance) {
+            leftMouseDown = true;
+            beginMining(intersects[0].object);
+            return;
+        }
+        if (nearestAnimalDistance < zombieHits[0].distance) {
+            const animal = findRootInCollection(animalHits[0].object, animalSystem.getAnimals());
+            if (animal) {
+                const away = new THREE.Vector3(animal.position.x - camera.position.x, 0, animal.position.z - camera.position.z);
+                animalSystem.damageAnimal(animal, selectedItemId() === 'volleyball' ? 999 : 1, away);
+                return;
+            }
+        }
         const zombieRoot = zombieHits[0].object.parent;
         const target = zombies.find(z => z === zombieRoot || z.children.includes(zombieHits[0].object));
         if (target) {
@@ -1027,23 +1532,35 @@ window.addEventListener('mousedown', (e) => {
             target.position.x += away.x * 1.9;
             target.position.z += away.z * 1.9;
             target.userData.velocityY = Math.max(target.userData.velocityY || 0, 4.8);
-            target.userData.health -= 1;
+            target.userData.health -= selectedItemId() === 'volleyball' ? 999 : 1;
             if (target.userData.health <= 0 && idx >= 0) {
-                scene.remove(target);
-                zombies.splice(idx, 1);
+                removeZombie(target);
             }
             return;
+        }
+    }
+    if (animalHits.length > 0 && e.button === 0) {
+        const nearestBlockDistance = intersects[0]?.distance ?? Infinity;
+        const nearestZombieDistance = zombieHits[0]?.distance ?? Infinity;
+        if (animalHits[0].distance < nearestBlockDistance && animalHits[0].distance < nearestZombieDistance) {
+            const animal = findRootInCollection(animalHits[0].object, animalSystem.getAnimals());
+            if (animal) {
+                const away = new THREE.Vector3(
+                    animal.position.x - camera.position.x,
+                    0,
+                    animal.position.z - camera.position.z
+                );
+                animalSystem.damageAnimal(animal, selectedItemId() === 'volleyball' ? 999 : 1, away);
+                return;
+            }
         }
     }
     if (intersects.length > 0) {
         const intersect = intersects[0];
         const pos = intersect.object.position.clone();
         if (e.button === 0) { // 挖掘
-            removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
-            const blockType = intersect.object.userData.blockType || 'stone';
-            dropSystem.spawnDrop(blockType, pos.x, pos.y, pos.z);
-            removeBlockMesh(intersect.object);
-            updateNeighbors(pos.x, pos.y, pos.z);
+            leftMouseDown = true;
+            beginMining(intersect.object);
         } else if (e.button === 2) { // 建造/使用
             if (intersect.object.userData.blockType === 'crafting_table') {
                 toggleInventory('table');
@@ -1069,6 +1586,24 @@ window.addEventListener('mousedown', (e) => {
             addBlockMesh(b);
         }
     }
+});
+window.addEventListener('mouseup', (e) => {
+    if (e.button === 0) {
+        leftMouseDown = false;
+        cancelMining();
+    }
+    if (e.button === 2) {
+        releaseThrowCharge();
+        rightMouseDown = false;
+        cancelEating();
+    }
+});
+window.addEventListener('blur', () => {
+    leftMouseDown = false;
+    rightMouseDown = false;
+    cancelMining();
+    cancelEating();
+    cancelThrowCharge();
 });
 window.addEventListener('mousemove', (e) => {
     if (!controls.isLocked || !isThirdPerson) return;
@@ -1119,7 +1654,8 @@ function tickFurnaces(dt) {
 }
 
 // --- E. 燈光與遊戲循環 ---
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambientLight);
 const sun = new THREE.DirectionalLight(0xffffff, 0.6);
 sun.position.set(10, 20, 10);
 scene.add(sun);
@@ -1129,6 +1665,38 @@ const playerAnchor = new THREE.Vector3(0, 30, 0);
 const thirdPersonDistance = 4.2;
 const thirdPersonFrontDistance = 3.2;
 const playerFacingDir = new THREE.Vector3(0, 0, 1);
+const daySkyColor = new THREE.Color(0x79b9e8);
+const sunsetSkyColor = new THREE.Color(0xc98262);
+const nightSkyColor = new THREE.Color(0x071326);
+const blendedSkyColor = new THREE.Color();
+
+function updateDayNight(dt) {
+    worldTime = (worldTime + dt) % DAY_NIGHT_CYCLE;
+    const isDayHalf = worldTime < DAY_DURATION;
+    const halfProgress = isDayHalf
+        ? worldTime / DAY_DURATION
+        : (worldTime - DAY_DURATION) / NIGHT_DURATION;
+    const daylight = isDayHalf
+        ? Math.sin(halfProgress * Math.PI)
+        : 0;
+    const transition = isDayHalf
+        ? Math.min(1, daylight * 2.5)
+        : Math.max(0, Math.cos(halfProgress * Math.PI) * 0.18);
+    const horizonTint = isDayHalf ? Math.min(1, Math.abs(halfProgress - 0.5) * 2) : 0;
+
+    blendedSkyColor.copy(nightSkyColor).lerp(daySkyColor, transition);
+    if (isDayHalf && horizonTint > 0.72) {
+        blendedSkyColor.lerp(sunsetSkyColor, (horizonTint - 0.72) * 0.35);
+    }
+    scene.background.copy(blendedSkyColor);
+    scene.fog.color.copy(blendedSkyColor);
+    scene.fog.density = THREE.MathUtils.lerp(0.085, 0.022, transition);
+    ambientLight.intensity = THREE.MathUtils.lerp(0.14, 0.72, transition);
+    sun.intensity = THREE.MathUtils.lerp(0.05, 0.85, daylight);
+
+    const cycleAngle = (worldTime / DAY_NIGHT_CYCLE) * Math.PI * 2 - Math.PI / 2;
+    sun.position.set(Math.cos(cycleAngle) * 40, Math.sin(cycleAngle) * 45, 18);
+}
 
 function createPlayerModel() {
     const g = new THREE.Group();
@@ -1168,6 +1736,7 @@ function createPlayerModel() {
 
 const playerModel = createPlayerModel();
 scene.add(playerModel);
+showGameplayView();
 
 let prevT = performance.now();
 function animate() {
@@ -1177,18 +1746,23 @@ function animate() {
     prevT = t;
     tickFurnaces(dt);
     if (inventoryOpen && craftingMode === "furnace") renderFurnace();
+    updateWorld();
+    processQueue();
+    flushChunkBuildQueue();
 
     if (controls.isLocked) {
+        updateDayNight(dt);
         if (isThirdPerson) {
             camera.position.set(playerAnchor.x, playerAnchor.y + currentHeight, playerAnchor.z);
         }
-        updateWorld();
-        processQueue();
-        flushChunkBuildQueue();
         dropSystem.updateDrops(dt);
         animalSystem.spawnAnimalsNearPlayer();
         animalSystem.updateAnimals(dt);
         updateZombies(dt);
+        updateMining(dt, t);
+        updateEating(dt, t);
+        updateThrowCharge(dt);
+        updateVolleyballProjectiles(dt);
 
         const targetH = isCrouching ? 1.2 : 1.8;
         currentHeight += (targetH - currentHeight) * 0.2;
@@ -1241,9 +1815,22 @@ function animate() {
             camera.position.y = Math.floor(camera.position.y) - 0.01;
         }
         if (groundH !== -999 && camera.position.y - currentHeight <= groundH) {
+            if (!ignoreFallDamageUntilGround && wasAirborne && peakFallSpeed > 13.5) {
+                const fallDamage = Math.floor((peakFallSpeed - 11.5) / 2);
+                damagePlayer(fallDamage, 'fall');
+            }
             velocity.y = 0; camera.position.y = groundH + currentHeight; canJump = true;
-        } else if (groundH !== -999) { canJump = false; }
-        if (camera.position.y < -30) camera.position.set(0, 30, 0);
+            ignoreFallDamageUntilGround = false;
+            wasAirborne = false;
+            peakFallSpeed = 0;
+        } else if (groundH !== -999) {
+            canJump = false;
+            wasAirborne = true;
+            if (velocity.y < 0) peakFallSpeed = Math.max(peakFallSpeed, -velocity.y);
+        }
+        if (camera.position.y < -30) {
+            damagePlayer(MAX_HEALTH, 'void', true);
+        }
 
         playerAnchor.set(camera.position.x, camera.position.y - currentHeight, camera.position.z);
         const viewDir = isThirdPerson
@@ -1254,6 +1841,7 @@ function animate() {
 
         const pdata = playerModel.userData;
         const horizontalSpeed = Math.hypot(velocity.x, velocity.z);
+        updateSurvival(dt, horizontalSpeed);
         pdata.walkPhase += dt * Math.min(10, horizontalSpeed * 0.45 + 2.5);
         const swing = horizontalSpeed > 0.2 ? Math.sin(pdata.walkPhase) * 0.65 : 0;
         pdata.legL.rotation.x = swing;
