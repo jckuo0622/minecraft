@@ -9,6 +9,7 @@ export function createDropSystem({ scene, camera, inventory, getNearbyBlocks, ge
         drop.position.set(x, y + 0.6, z);
         drop.userData.itemId = itemId;
         drop.userData.vy = 0;
+        drop.userData.collected = false;
         scene.add(drop);
         droppedItems.push(drop);
     }
@@ -16,6 +17,7 @@ export function createDropSystem({ scene, camera, inventory, getNearbyBlocks, ge
     function updateDrops(dt) {
         for (let i = droppedItems.length - 1; i >= 0; i--) {
             const drop = droppedItems[i];
+            if (!drop || drop.userData.collected) continue;
             drop.userData.vy -= 18 * dt;
             drop.position.y += drop.userData.vy * dt;
 
@@ -35,10 +37,17 @@ export function createDropSystem({ scene, camera, inventory, getNearbyBlocks, ge
             const dy = (drop.position.y + 0.5) - (playerFeetY + 0.6);
             const dz = drop.position.z - camera.position.z;
             if ((dx * dx + dy * dy + dz * dz) < 2.25) {
-                inventory.add(drop.userData.itemId, 1, true);
-                onInventoryUpdated();
+                drop.userData.collected = true;
                 scene.remove(drop);
                 droppedItems.splice(i, 1);
+                const added = inventory.add(drop.userData.itemId, 1, true);
+                if (added === 1) {
+                    onInventoryUpdated();
+                } else {
+                    drop.userData.collected = false;
+                    scene.add(drop);
+                    droppedItems.push(drop);
+                }
             }
         }
     }

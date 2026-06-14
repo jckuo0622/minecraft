@@ -3,13 +3,16 @@ export class BlockItem {
 }
 
 export class Inventory {
-  constructor(size = 36, maxStack = 64) {
+  constructor(size = 36, maxStack = 64, onChange = null) {
     this.slots = Array.from({ length: size }, () => null); // { itemId, count }
     this.maxStack = maxStack;
+    this.onChange = onChange;
   }
 
   add(itemId, amount = 1, preferHotbar = false) {
+    if (typeof itemId !== 'string' || !Number.isInteger(amount) || amount <= 0) return 0;
     let remain = amount;
+    const originalRemain = remain;
     const ranges = preferHotbar ? [[27, 36], [0, 27]] : [[0, this.slots.length]];
 
     // 先填滿同類未滿堆疊
@@ -20,10 +23,12 @@ export class Inventory {
         const addable = Math.min(this.maxStack - slot.count, remain);
         slot.count += addable;
         remain -= addable;
-        if (remain <= 0) return;
+        if (remain <= 0) {
+          this.onChange?.();
+          return originalRemain;
+        }
       }
     }
-
     // 再塞空位
     for (const [start, end] of ranges) {
       for (let i = start; i < end && remain > 0; i++) {
@@ -33,6 +38,8 @@ export class Inventory {
         remain -= stackCount;
       }
     }
+    if (remain < originalRemain) this.onChange?.();
+    return originalRemain - remain;
   }
 
   has(itemId, amount = 1) {
@@ -52,6 +59,7 @@ export class Inventory {
       need -= used;
       if (slot.count <= 0) this.slots[i] = null;
     }
+    this.onChange?.();
     return true;
   }
 
@@ -60,6 +68,7 @@ export class Inventory {
     const temp = this.slots[from];
     this.slots[from] = this.slots[to];
     this.slots[to] = temp;
+    this.onChange?.();
   }
 
   entries() {
