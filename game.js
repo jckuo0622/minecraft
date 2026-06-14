@@ -697,6 +697,11 @@ function toggleInventory(mode = 'inventory') {
     inventoryOpen = !inventoryOpen;
 
     if (inventoryOpen) {
+        leftMouseDown = false;
+        rightMouseDown = false;
+        cancelMining();
+        cancelEating();
+        cancelThrowCharge();
         openedInventoryFromLock = controls.isLocked;
         if (controls.isLocked) {
             unlockingForInventory = true;
@@ -748,6 +753,7 @@ const blocks = [];
 const blockByPos = new Map();
 const columnIndex = new Map();
 const removedBlocks = new Set(); // 儲存被挖掉的座標 "x,y,z"
+const placedBlocks = new Map(); // 玩家放置的方塊，座標字串 -> 方塊類型
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const worldWorker = new Worker('./worldWorker.js', { type: 'module' });
 const pendingChunks = new Set();
@@ -767,6 +773,104 @@ const animalSystem = createAnimalSystem({
 
 const zombies = [];
 let zombieSpawnTimer = 0;
+const creepers = [];
+let creeperSpawnTimer = 0;
+
+function clearZombies() {
+    for (const zombie of zombies) scene.remove(zombie);
+    zombies.length = 0;
+    zombieSpawnTimer = 0;
+}
+
+function setGameMode(mode) {
+    gameMode = mode === 'peaceful' ? 'peaceful' : 'survival';
+    const peaceful = gameMode === 'peaceful';
+    peacefulModeButton.classList.toggle('selected', peaceful);
+    peacefulModeButton.setAttribute('aria-pressed', String(peaceful));
+    survivalModeButton.classList.toggle('selected', !peaceful);
+    survivalModeButton.setAttribute('aria-pressed', String(!peaceful));
+    if (peaceful) clearZombies();
+}
+
+function clearZombies() {
+    for (const zombie of zombies) scene.remove(zombie);
+    zombies.length = 0;
+    zombieSpawnTimer = 0;
+}
+
+function setGameMode(mode) {
+    gameMode = mode === 'peaceful' ? 'peaceful' : 'survival';
+    const peaceful = gameMode === 'peaceful';
+    peacefulModeButton.classList.toggle('selected', peaceful);
+    peacefulModeButton.setAttribute('aria-pressed', String(peaceful));
+    survivalModeButton.classList.toggle('selected', !peaceful);
+    survivalModeButton.setAttribute('aria-pressed', String(!peaceful));
+    if (peaceful) clearZombies();
+}
+
+function clearZombies() {
+    for (const zombie of zombies) scene.remove(zombie);
+    zombies.length = 0;
+    zombieSpawnTimer = 0;
+}
+
+function setGameMode(mode) {
+    gameMode = mode === 'peaceful' ? 'peaceful' : 'survival';
+    const peaceful = gameMode === 'peaceful';
+    peacefulModeButton?.classList.toggle('selected', peaceful);
+    peacefulModeButton?.setAttribute('aria-pressed', String(peaceful));
+    survivalModeButton?.classList.toggle('selected', !peaceful);
+    survivalModeButton?.setAttribute('aria-pressed', String(!peaceful));
+    if (peaceful) clearZombies();
+}
+
+function clearZombies() {
+    for (const zombie of zombies) scene.remove(zombie);
+    zombies.length = 0;
+    zombieSpawnTimer = 0;
+}
+
+function setGameMode(mode) {
+    gameMode = mode === 'peaceful' ? 'peaceful' : 'survival';
+    const peaceful = gameMode === 'peaceful';
+    peacefulModeButton?.classList.toggle('selected', peaceful);
+    peacefulModeButton?.setAttribute('aria-pressed', String(peaceful));
+    survivalModeButton?.classList.toggle('selected', !peaceful);
+    survivalModeButton?.setAttribute('aria-pressed', String(!peaceful));
+    if (peaceful) clearZombies();
+}
+
+function clearPeacefulModeZombies() {
+    for (const zombie of zombies) scene.remove(zombie);
+    zombies.length = 0;
+    zombieSpawnTimer = 0;
+}
+
+function setGameMode(mode) {
+    gameMode = mode === 'peaceful' ? 'peaceful' : 'survival';
+    const peaceful = gameMode === 'peaceful';
+    peacefulModeButton?.classList.toggle('selected', peaceful);
+    peacefulModeButton?.setAttribute('aria-pressed', String(peaceful));
+    survivalModeButton?.classList.toggle('selected', !peaceful);
+    survivalModeButton?.setAttribute('aria-pressed', String(!peaceful));
+    if (peaceful) clearPeacefulModeZombies();
+}
+
+function clearZombies() {
+    for (const zombie of zombies) scene.remove(zombie);
+    zombies.length = 0;
+    zombieSpawnTimer = 0;
+}
+
+function setGameMode(mode) {
+    gameMode = mode === 'peaceful' ? 'peaceful' : 'survival';
+    const peaceful = gameMode === 'peaceful';
+    peacefulModeButton?.classList.toggle('selected', peaceful);
+    peacefulModeButton?.setAttribute('aria-pressed', String(peaceful));
+    survivalModeButton?.classList.toggle('selected', !peaceful);
+    survivalModeButton?.setAttribute('aria-pressed', String(!peaceful));
+    if (peaceful) clearZombies();
+}
 
 function clearZombies() {
     for (const zombie of zombies) scene.remove(zombie);
@@ -897,6 +1001,155 @@ function updateZombies(dt) {
         if (dx * dx + dz * dz > 150 * 150) {
             scene.remove(z); zombies.splice(i, 1);
         }
+    }
+}
+
+function createCreeper(x, y, z) {
+    const group = new THREE.Group();
+    const green = new THREE.MeshLambertMaterial({ color: 0x55a832 });
+    const darkGreen = new THREE.MeshLambertMaterial({ color: 0x397a25 });
+    const face = new THREE.MeshLambertMaterial({ color: 0x172617 });
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.72, 0.72), green);
+    head.position.y = 1.5;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.9, 0.42), darkGreen);
+    body.position.y = 0.75;
+    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.03), face);
+    eyeL.position.set(-0.17, 1.62, -0.375);
+    const eyeR = eyeL.clone();
+    eyeR.position.x = 0.17;
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.03), face);
+    mouth.position.set(0, 1.38, -0.375);
+    const legs = [];
+    for (const [lx, lz] of [[-0.2, -0.14], [0.2, -0.14], [-0.2, 0.14], [0.2, 0.14]]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.42, 0.22), green);
+        leg.position.set(lx, 0.21, lz);
+        legs.push(leg);
+    }
+    group.add(head, body, eyeL, eyeR, mouth, ...legs);
+    group.position.set(x, y, z);
+    group.userData = {
+        health: 4,
+        hitCooldown: 0,
+        velocityY: 0,
+        canJump: true,
+        phase: Math.random() * Math.PI * 2,
+        fuse: 0,
+        legs
+    };
+    return group;
+}
+
+function spawnCreeperNearPlayer() {
+    for (let attempt = 0; attempt < 8; attempt++) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 14 + Math.random() * 18;
+        const x = Math.floor(camera.position.x + Math.cos(angle) * distance) + 0.5;
+        const z = Math.floor(camera.position.z + Math.sin(angle) * distance) + 0.5;
+        const nearby = getNearbyBlocks(x, z, 2);
+        const approximateY = getSurfaceHeightApprox(Math.round(x), Math.round(z));
+        const groundY = getGroundAt(x, z, nearby, 0.34, approximateY + 1.5);
+        if (groundY === -999 || checkWall(x, groundY + 1.1, z, nearby, 0.34)) continue;
+        const creeper = createCreeper(x, groundY, z);
+        scene.add(creeper);
+        creepers.push(creeper);
+        return;
+    }
+}
+
+function removeCreeper(target) {
+    const index = creepers.indexOf(target);
+    if (index < 0) return false;
+    scene.remove(target);
+    creepers.splice(index, 1);
+    return true;
+}
+
+function explodeCreeper(creeper) {
+    const distance = creeper.position.distanceTo(camera.position);
+    if (distance < 5) {
+        const strength = Math.max(0, 1 - distance / 5);
+        damagePlayer(Math.max(2, Math.ceil(12 * strength)), 'creeper');
+        const away = new THREE.Vector3(
+            camera.position.x - creeper.position.x,
+            0,
+            camera.position.z - creeper.position.z
+        );
+        if (away.lengthSq() > 0.0001) away.normalize();
+        velocity.x += away.x * 15 * strength;
+        velocity.z += away.z * 15 * strength;
+        velocity.y += 7 * strength;
+    }
+    removeCreeper(creeper);
+}
+
+function updateCreepers(dt) {
+    creeperSpawnTimer += dt;
+    if (creeperSpawnTimer >= 45) {
+        creeperSpawnTimer = 0;
+        if (creepers.length < 4) spawnCreeperNearPlayer();
+    }
+    for (let i = creepers.length - 1; i >= 0; i--) {
+        const creeper = creepers[i];
+        const data = creeper.userData;
+        data.hitCooldown = Math.max(0, data.hitCooldown - dt);
+        const toPlayer = new THREE.Vector3(
+            camera.position.x - creeper.position.x,
+            0,
+            camera.position.z - creeper.position.z
+        );
+        const horizontalDistance = toPlayer.length();
+        if (horizontalDistance > 0.001) toPlayer.normalize();
+
+        const playerCenterY = camera.position.y - currentHeight * 0.5;
+        const distanceToPlayer = Math.hypot(
+            camera.position.x - creeper.position.x,
+            playerCenterY - (creeper.position.y + 0.9),
+            camera.position.z - creeper.position.z
+        );
+        if (distanceToPlayer < 2.8) {
+            data.fuse += dt;
+            const pulse = 1 + Math.sin(data.fuse * 22) * Math.min(0.08, data.fuse * 0.04);
+            creeper.scale.set(pulse, 1 + (pulse - 1) * 1.8, pulse);
+            if (data.fuse >= 1.5) {
+                explodeCreeper(creeper);
+                continue;
+            }
+        } else {
+            data.fuse = Math.max(0, data.fuse - dt * 2);
+            creeper.scale.lerp(new THREE.Vector3(1, 1, 1), Math.min(1, dt * 10));
+            const step = Math.min(Math.max(0, horizontalDistance - 1.8), 1.45 * dt);
+            const nextX = creeper.position.x + toPlayer.x * step;
+            const nextZ = creeper.position.z + toPlayer.z * step;
+            const nearby = getNearbyBlocks(creeper.position.x, creeper.position.z, 3);
+            const ahead = getNearbyBlocks(nextX, nextZ, 3);
+            const currentGround = getGroundAt(creeper.position.x, creeper.position.z, nearby, 0.34, creeper.position.y + 0.8);
+            const nextGround = getGroundAt(nextX, nextZ, ahead, 0.34, creeper.position.y + 1.2);
+            const heightDifference = currentGround !== -999 && nextGround !== -999 ? nextGround - currentGround : 0;
+            const blocked = checkWall(nextX, creeper.position.y + 1.1, nextZ, ahead, 0.34);
+            if (!blocked && nextGround !== -999 && heightDifference <= 1.05) {
+                creeper.position.set(nextX, nextGround, nextZ);
+            } else if (heightDifference > 0.7 && heightDifference <= 1.6 && data.canJump) {
+                data.velocityY = 9.5;
+                data.canJump = false;
+            }
+            if (currentGround !== -999) data.velocityY -= 28 * dt;
+            creeper.position.y += data.velocityY * dt;
+            const groundNow = getGroundAt(creeper.position.x, creeper.position.z, nearby, 0.34, creeper.position.y + 0.1);
+            if (groundNow !== -999 && creeper.position.y <= groundNow) {
+                creeper.position.y = groundNow;
+                data.velocityY = 0;
+                data.canJump = true;
+            }
+        }
+
+        data.phase += dt * 7;
+        for (let legIndex = 0; legIndex < data.legs.length; legIndex++) {
+            data.legs[legIndex].rotation.x = Math.sin(data.phase + (legIndex % 2) * Math.PI) * 0.45;
+        }
+        creeper.rotation.y = Math.atan2(toPlayer.x, toPlayer.z) + Math.PI;
+        const dx = creeper.position.x - camera.position.x;
+        const dz = creeper.position.z - camera.position.z;
+        if (dx * dx + dz * dz > 150 * 150) removeCreeper(creeper);
     }
 }
 
@@ -1058,13 +1311,15 @@ function getNearbyBlocks(x, z, radius = 2) {
 
 
 function getSurfaceHeightApprox(x, z) {
-    let mountain = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 5;
-    let hills = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 2;
-    let detail = Math.sin(x * 0.4) * Math.cos(z * 0.4) * 0.5;
+    const sx = x + (worldSeed % 997);
+    const sz = z + (Math.floor(worldSeed / 997) % 991);
+    let mountain = Math.sin(sx * 0.05) * Math.cos(sz * 0.05) * 5;
+    let hills = Math.sin(sx * 0.15) * Math.sin(sz * 0.15) * 2;
+    let detail = Math.sin(sx * 0.4) * Math.cos(sz * 0.4) * 0.5;
     return Math.round(mountain + hills + detail);
 }
 
-// 核心：補洞邏輯
+// 挖掘原始地形後只補出正下方的石頭，避免每次挖掘向六面擴張出石頭群。
 function updateNeighbors(x, y, z) {
     const directions = [
         [1, 0, 0], [-1, 0, 0],
@@ -1097,7 +1352,8 @@ function spawnChunk(cx, cz) {
         type: 'generate_chunk',
         cx,
         cz,
-        removedBlocks: Array.from(removedBlocks)
+        removedBlocks: Array.from(removedBlocks),
+        worldSeed
     });
     renderHeldItemInHand();
 }
@@ -1106,6 +1362,7 @@ worldWorker.onmessage = (event) => {
     const { type, key, blocks: blockData } = event.data;
     if (type !== 'chunk_generated') return;
     pendingChunks.delete(key);
+    if (loadedChunks.has(key) || chunkBuildQueue.some(chunk => chunk.key === key)) return;
     chunkBuildQueue.push({ key, blockData });
 };
 
@@ -1115,11 +1372,22 @@ function flushChunkBuildQueue(maxChunksPerFrame = 1) {
         if (loadedChunks.has(key)) continue;
         const chunkBlocks = [];
         for (const data of blockData) {
+            const key = posKey(data.x, data.y, data.z);
+            if (placedBlocks.has(key) || removedBlocks.has(key)) continue;
             const m = new THREE.Mesh(boxGeo, getMaterials(data.type));
             m.userData.blockType = data.type;
             m.position.set(data.x, data.y, data.z);
-            addBlockMesh(m);
-            chunkBlocks.push(m);
+            if (addBlockMesh(m)) chunkBlocks.push(m);
+        }
+        const [cx, cz] = key.split(',').map(Number);
+        for (const [positionKey, blockType] of placedBlocks) {
+            const [x, y, z] = positionKey.split(',').map(Number);
+            if (Math.floor(x / CHUNK_SIZE) !== cx || Math.floor(z / CHUNK_SIZE) !== cz) continue;
+            const m = new THREE.Mesh(boxGeo, getMaterials(blockType));
+            m.userData.blockType = blockType;
+            m.userData.playerPlaced = true;
+            m.position.set(x, y, z);
+            if (addBlockMesh(m)) chunkBlocks.push(m);
         }
         loadedChunks.set(key, chunkBlocks);
     }
@@ -1605,8 +1873,12 @@ window.addEventListener('mousedown', (e) => {
             renderQuickCraft();
             const placePos = pos.add(intersect.face.normal);
             b.position.copy(placePos);
-            removedBlocks.delete(`${placePos.x},${placePos.y},${placePos.z}`);
-            addBlockMesh(b);
+            const key = posKey(Math.round(placePos.x), Math.round(placePos.y), Math.round(placePos.z));
+            b.userData.playerPlaced = true;
+            if (addBlockMesh(b)) {
+                placedBlocks.set(key, selectedSlot.itemId);
+                removedBlocks.delete(key);
+            }
         }
     }
 });
@@ -1682,9 +1954,14 @@ scene.add(ambientLight);
 const sun = new THREE.DirectionalLight(0xffffff, 0.6);
 sun.position.set(10, 20, 10);
 scene.add(sun);
-camera.position.set(0, 30, 0);
+const initialPlayerPosition = { x: 0, y: 30, z: 0 };
+camera.position.set(initialPlayerPosition.x, initialPlayerPosition.y, initialPlayerPosition.z);
 
-const playerAnchor = new THREE.Vector3(0, 30, 0);
+const playerAnchor = new THREE.Vector3(
+    initialPlayerPosition.x,
+    initialPlayerPosition.y - 1.8,
+    initialPlayerPosition.z
+);
 const thirdPersonDistance = 4.2;
 const thirdPersonFrontDistance = 3.2;
 const playerFacingDir = new THREE.Vector3(0, 0, 1);
