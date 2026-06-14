@@ -6,8 +6,6 @@ import { BlockItem, Inventory, CraftingRecipe, CraftingManager } from './invento
 import { createAnimalSystem } from './animals.js';
 import { createDropSystem } from './drops.js';
 
-const worldSeed = Math.floor(Math.random() * 2147483647);
-
 const itemDefs = {
     wood: new BlockItem('wood', '木頭'),
     sand: new BlockItem('sand', '沙子'),
@@ -89,8 +87,11 @@ const eatingProgressEl = document.getElementById('eating-progress');
 const eatingProgressFillEl = document.getElementById('eating-progress-fill');
 const throwProgressEl = document.getElementById('throw-progress');
 const throwProgressFillEl = document.getElementById('throw-progress-fill');
+const peacefulModeButton = document.getElementById('btn-mode-peaceful');
+const survivalModeButton = document.getElementById('btn-mode-survival');
 
 let inventoryOpen = false;
+let gameMode = 'survival';
 let craftingMode = 'inventory'; // inventory | table | furnace
 let openedInventoryFromLock = false;
 let unlockingForInventory = false;
@@ -775,6 +776,22 @@ let zombieSpawnTimer = 0;
 const creepers = [];
 let creeperSpawnTimer = 0;
 
+function clearZombies() {
+    for (const zombie of zombies) scene.remove(zombie);
+    zombies.length = 0;
+    zombieSpawnTimer = 0;
+}
+
+function setGameMode(mode) {
+    gameMode = mode === 'peaceful' ? 'peaceful' : 'survival';
+    const peaceful = gameMode === 'peaceful';
+    peacefulModeButton.classList.toggle('selected', peaceful);
+    peacefulModeButton.setAttribute('aria-pressed', String(peaceful));
+    survivalModeButton.classList.toggle('selected', !peaceful);
+    survivalModeButton.setAttribute('aria-pressed', String(!peaceful));
+    if (peaceful) clearZombies();
+}
+
 function createZombie(x, y, z) {
     const zGroup = new THREE.Group();
     const skin = new THREE.MeshLambertMaterial({ color: 0x7dbb7d });
@@ -816,6 +833,7 @@ function spawnZombieNearPlayer() {
 }
 
 function updateZombies(dt) {
+    if (gameMode === 'peaceful') return;
     zombieSpawnTimer += dt;
     if (zombieSpawnTimer >= 30) {
         zombieSpawnTimer = 0;
@@ -1132,15 +1150,6 @@ function updateVolleyballProjectiles(dt) {
                 break;
             }
         }
-        if (!hitMob) {
-            for (const creeper of [...creepers]) {
-                const center = creeper.position.clone().add(new THREE.Vector3(0, 0.9, 0));
-                if (center.distanceToSquared(ball.position) > 0.85 * 0.85) continue;
-                removeCreeper(creeper);
-                hitMob = true;
-                break;
-            }
-        }
         if (hitMob) {
             finishVolleyballProjectile(i, ball.position.clone());
             continue;
@@ -1400,6 +1409,8 @@ renderHeldItemInHand();
 renderSurvivalHud();
 
 // --- D. 控制與點擊 ---
+peacefulModeButton.addEventListener('click', () => setGameMode('peaceful'));
+survivalModeButton.addEventListener('click', () => setGameMode('survival'));
 document.getElementById('btn-play').addEventListener('click', () => controls.lock());
 controls.addEventListener('lock', () => {
     overlay.style.display = 'none';
@@ -1503,7 +1514,6 @@ function getCenterRayHits() {
     return {
         blocks: raycaster.intersectObjects(interactableBlocks),
         zombies: raycaster.intersectObjects(zombies, true),
-        creepers: raycaster.intersectObjects(creepers, true),
         animals: raycaster.intersectObjects(animalSystem.getAnimals(), true)
     };
 }
@@ -1535,24 +1545,18 @@ function beginMining(mesh) {
 }
 
 function finishMining(mesh) {
-    if (!mesh || mesh.userData.mined || !blocks.includes(mesh)) {
+    if (!mesh || !blocks.includes(mesh)) {
         cancelMining();
         return;
     }
     const pos = mesh.position.clone();
-    const key = posKey(Math.round(pos.x), Math.round(pos.y), Math.round(pos.z));
-    if (removedBlocks.has(key)) {
-        cancelMining();
-        return;
-    }
     const blockType = mesh.userData.blockType || 'stone';
-    mesh.userData.mined = true;
-    removedBlocks.add(key);
-    cancelMining();
-    removeBlockMesh(mesh);
+    removedBlocks.add(`${pos.x},${pos.y},${pos.z}`);
     dropSystem.spawnDrop(blockType, pos.x, pos.y, pos.z);
+    removeBlockMesh(mesh);
     updateNeighbors(pos.x, pos.y, pos.z);
     addExhaustion(0.08);
+    cancelMining();
 }
 
 function updateMining(dt, now) {
@@ -1561,11 +1565,7 @@ function updateMining(dt, now) {
         return;
     }
     const hits = getCenterRayHits();
-    const nearestHostileDistance = Math.min(
-        hits.zombies[0]?.distance ?? Infinity,
-        hits.creepers[0]?.distance ?? Infinity
-    );
-    if (nearestHostileDistance < (hits.blocks[0]?.distance ?? Infinity)) {
+    if (hits.zombies.length > 0 && (!hits.blocks.length || hits.zombies[0].distance < hits.blocks[0].distance)) {
         cancelMining();
         return;
     }
@@ -1579,11 +1579,7 @@ function updateMining(dt, now) {
         return;
     }
     const key = posKey(Math.round(target.position.x), Math.round(target.position.y), Math.round(target.position.z));
-    if (!miningState || miningState.key !== key || miningState.mesh !== target) beginMining(target);
-    if (!miningState || miningState.mesh.userData.mined) {
-        cancelMining();
-        return;
-    }
+    if (!miningState || miningState.key !== key) beginMining(target);
     miningState.elapsed += dt;
     miningState.duration = miningDuration(target.userData.blockType || 'stone');
     const progress = Math.min(1, miningState.elapsed / miningState.duration);
@@ -1705,35 +1701,9 @@ window.addEventListener('mousedown', (e) => {
     const hits = getCenterRayHits();
     const intersects = hits.blocks;
     const zombieHits = hits.zombies;
-    const creeperHits = hits.creepers;
     const animalHits = hits.animals;
-    const nearestCreeperDistance = creeperHits[0]?.distance ?? Infinity;
-    const nearestZombieDistance = zombieHits[0]?.distance ?? Infinity;
-    if (e.button === 0 && nearestCreeperDistance < nearestZombieDistance
-        && nearestCreeperDistance < (intersects[0]?.distance ?? Infinity)
-        && nearestCreeperDistance < (animalHits[0]?.distance ?? Infinity)) {
-        const target = findRootInCollection(creeperHits[0].object, creepers);
-        if (target) {
-            const away = new THREE.Vector3(
-                target.position.x - camera.position.x,
-                0,
-                target.position.z - camera.position.z
-            );
-            if (away.lengthSq() > 0.0001) away.normalize();
-            target.position.x += away.x * 1.9;
-            target.position.z += away.z * 1.9;
-            target.userData.velocityY = Math.max(target.userData.velocityY || 0, 4.8);
-            target.userData.fuse = 0;
-            target.userData.health -= selectedItemId() === 'volleyball' ? 999 : 1;
-            if (target.userData.health <= 0) removeCreeper(target);
-            return;
-        }
-    }
     if (zombieHits.length > 0 && e.button === 0) {
-        const nearestAnimalDistance = Math.min(
-            animalHits[0]?.distance ?? Infinity,
-            nearestCreeperDistance
-        );
+        const nearestAnimalDistance = animalHits[0]?.distance ?? Infinity;
         if (intersects.length > 0 && intersects[0].distance < zombieHits[0].distance && intersects[0].distance < nearestAnimalDistance) {
             leftMouseDown = true;
             beginMining(intersects[0].object);
@@ -1765,8 +1735,8 @@ window.addEventListener('mousedown', (e) => {
     }
     if (animalHits.length > 0 && e.button === 0) {
         const nearestBlockDistance = intersects[0]?.distance ?? Infinity;
-        const nearestHostileDistance = Math.min(nearestZombieDistance, nearestCreeperDistance);
-        if (animalHits[0].distance < nearestBlockDistance && animalHits[0].distance < nearestHostileDistance) {
+        const nearestZombieDistance = zombieHits[0]?.distance ?? Infinity;
+        if (animalHits[0].distance < nearestBlockDistance && animalHits[0].distance < nearestZombieDistance) {
             const animal = findRootInCollection(animalHits[0].object, animalSystem.getAnimals());
             if (animal) {
                 const away = new THREE.Vector3(
@@ -1991,7 +1961,6 @@ function animate() {
         animalSystem.spawnAnimalsNearPlayer();
         animalSystem.updateAnimals(dt);
         updateZombies(dt);
-        updateCreepers(dt);
         updateMining(dt, t);
         updateEating(dt, t);
         updateThrowCharge(dt);
