@@ -808,6 +808,22 @@ function setGameMode(mode) {
     if (peaceful) clearZombies();
 }
 
+function clearZombies() {
+    for (const zombie of zombies) scene.remove(zombie);
+    zombies.length = 0;
+    zombieSpawnTimer = 0;
+}
+
+function setGameMode(mode) {
+    gameMode = mode === 'peaceful' ? 'peaceful' : 'survival';
+    const peaceful = gameMode === 'peaceful';
+    peacefulModeButton?.classList.toggle('selected', peaceful);
+    peacefulModeButton?.setAttribute('aria-pressed', String(peaceful));
+    survivalModeButton?.classList.toggle('selected', !peaceful);
+    survivalModeButton?.setAttribute('aria-pressed', String(!peaceful));
+    if (peaceful) clearZombies();
+}
+
 function createZombie(x, y, z) {
     const zGroup = new THREE.Group();
     const skin = new THREE.MeshLambertMaterial({ color: 0x7dbb7d });
@@ -1425,9 +1441,10 @@ renderHeldItemInHand();
 renderSurvivalHud();
 
 // --- D. 控制與點擊 ---
-peacefulModeButton.addEventListener('click', () => setGameMode('peaceful'));
-survivalModeButton.addEventListener('click', () => setGameMode('survival'));
-document.getElementById('btn-play').addEventListener('click', () => controls.lock());
+peacefulModeButton?.addEventListener('click', () => setGameMode('peaceful'));
+survivalModeButton?.addEventListener('click', () => setGameMode('survival'));
+const playButton = document.getElementById('btn-play');
+playButton?.addEventListener('click', () => controls.lock());
 controls.addEventListener('lock', () => {
     overlay.style.display = 'none';
     crosshair.style.display = inventoryOpen ? 'none' : 'block';
