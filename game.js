@@ -792,6 +792,22 @@ function setGameMode(mode) {
     if (peaceful) clearZombies();
 }
 
+function clearZombies() {
+    for (const zombie of zombies) scene.remove(zombie);
+    zombies.length = 0;
+    zombieSpawnTimer = 0;
+}
+
+function setGameMode(mode) {
+    gameMode = mode === 'peaceful' ? 'peaceful' : 'survival';
+    const peaceful = gameMode === 'peaceful';
+    peacefulModeButton.classList.toggle('selected', peaceful);
+    peacefulModeButton.setAttribute('aria-pressed', String(peaceful));
+    survivalModeButton.classList.toggle('selected', !peaceful);
+    survivalModeButton.setAttribute('aria-pressed', String(!peaceful));
+    if (peaceful) clearZombies();
+}
+
 function createZombie(x, y, z) {
     const zGroup = new THREE.Group();
     const skin = new THREE.MeshLambertMaterial({ color: 0x7dbb7d });
@@ -1948,15 +1964,15 @@ function animate() {
     prevT = t;
     tickFurnaces(dt);
     if (inventoryOpen && craftingMode === "furnace") renderFurnace();
+    updateWorld();
+    processQueue();
+    flushChunkBuildQueue();
 
     if (controls.isLocked) {
         updateDayNight(dt);
         if (isThirdPerson) {
             camera.position.set(playerAnchor.x, playerAnchor.y + currentHeight, playerAnchor.z);
         }
-        updateWorld();
-        processQueue();
-        flushChunkBuildQueue();
         dropSystem.updateDrops(dt);
         animalSystem.spawnAnimalsNearPlayer();
         animalSystem.updateAnimals(dt);
