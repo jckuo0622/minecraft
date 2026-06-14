@@ -1954,14 +1954,10 @@ scene.add(ambientLight);
 const sun = new THREE.DirectionalLight(0xffffff, 0.6);
 sun.position.set(10, 20, 10);
 scene.add(sun);
-const initialPlayerPosition = { x: 0, y: 30, z: 0 };
-camera.position.set(initialPlayerPosition.x, initialPlayerPosition.y, initialPlayerPosition.z);
+camera.position.set(0, 30, 0);
+camera.lookAt(0, 0, 0);
 
-const playerAnchor = new THREE.Vector3(
-    initialPlayerPosition.x,
-    initialPlayerPosition.y - 1.8,
-    initialPlayerPosition.z
-);
+const playerAnchor = new THREE.Vector3(0, 30, 0);
 const thirdPersonDistance = 4.2;
 const thirdPersonFrontDistance = 3.2;
 const playerFacingDir = new THREE.Vector3(0, 0, 1);
@@ -2036,7 +2032,10 @@ function createPlayerModel() {
 
 const playerModel = createPlayerModel();
 scene.add(playerModel);
+updateWorld();
+while (generationQueue.length > 0) processQueue();
 showGameplayView();
+renderer.render(scene, camera);
 
 let prevT = performance.now();
 function animate() {
