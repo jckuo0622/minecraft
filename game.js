@@ -96,6 +96,12 @@ let craftSlots = Array.from({ length: 4 }, () => null);
 let activeFurnaceKey = null;
 const furnaceStates = new Map();
 const equipment = { helmet: null, chest: null, legs: null, boots: null };
+if (loadedSave) {
+    for (const slot of Object.keys(equipment)) {
+        const item = loadedSave.equipment[slot];
+        equipment[slot] = item && typeof item.itemId === 'string' ? { itemId: item.itemId } : null;
+    }
+}
 let selectedIdx = 0;
 let isThirdPerson = false;
 let lastViewToggleAt = 0;
@@ -394,6 +400,7 @@ function renderEquipment() {
             }
             inventory.remove(invSlot.itemId, 1);
             equipment[slot] = { itemId: invSlot.itemId };
+            markSaveDirty();
             renderInventory(); renderHotbar(); renderEquipment();
         };
 
@@ -401,6 +408,7 @@ function renderEquipment() {
             if (!equipment[slot]) return;
             inventory.add(equipment[slot].itemId, 1, false);
             equipment[slot] = null;
+            markSaveDirty();
             renderInventory(); renderHotbar(); renderEquipment();
         };
     });
@@ -745,6 +753,8 @@ const blocks = [];
 const blockByPos = new Map();
 const columnIndex = new Map();
 const removedBlocks = new Set(); // 儲存被挖掉的座標 "x,y,z"
+const placedBlocks = new Map(); // 玩家放置的方塊，座標字串 -> 方塊類型
+if (loadedSave) applyWorldChanges(loadedSave, removedBlocks, placedBlocks);
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const worldWorker = new Worker('./worldWorker.js', { type: 'module' });
 const pendingChunks = new Set();
@@ -887,6 +897,7 @@ const dropSystem = createDropSystem({
     getNearbyBlocks,
     getMaterials,
     onInventoryUpdated: () => {
+        markSaveDirty();
         renderHotbar();
         renderHeldItemInHand();
         if (inventoryOpen) { renderInventory(); renderCrafting(); }
@@ -1038,13 +1049,15 @@ function getNearbyBlocks(x, z, radius = 2) {
 
 
 function getSurfaceHeightApprox(x, z) {
-    let mountain = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 5;
-    let hills = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 2;
-    let detail = Math.sin(x * 0.4) * Math.cos(z * 0.4) * 0.5;
+    const sx = x + (worldSeed % 997);
+    const sz = z + (Math.floor(worldSeed / 997) % 991);
+    let mountain = Math.sin(sx * 0.05) * Math.cos(sz * 0.05) * 5;
+    let hills = Math.sin(sx * 0.15) * Math.sin(sz * 0.15) * 2;
+    let detail = Math.sin(sx * 0.4) * Math.cos(sz * 0.4) * 0.5;
     return Math.round(mountain + hills + detail);
 }
 
-// 核心：補洞邏輯
+// 挖掘原始地形後只補出正下方的石頭，避免每次挖掘向六面擴張出石頭群。
 function updateNeighbors(x, y, z) {
     const directions = [
         [1, 0, 0], [-1, 0, 0],
@@ -1077,7 +1090,8 @@ function spawnChunk(cx, cz) {
         type: 'generate_chunk',
         cx,
         cz,
-        removedBlocks: Array.from(removedBlocks)
+        removedBlocks: Array.from(removedBlocks),
+        worldSeed
     });
     renderHeldItemInHand();
 }
@@ -1086,6 +1100,7 @@ worldWorker.onmessage = (event) => {
     const { type, key, blocks: blockData } = event.data;
     if (type !== 'chunk_generated') return;
     pendingChunks.delete(key);
+    if (loadedChunks.has(key) || chunkBuildQueue.some(chunk => chunk.key === key)) return;
     chunkBuildQueue.push({ key, blockData });
 };
 
@@ -1095,11 +1110,22 @@ function flushChunkBuildQueue(maxChunksPerFrame = 1) {
         if (loadedChunks.has(key)) continue;
         const chunkBlocks = [];
         for (const data of blockData) {
+            const key = posKey(data.x, data.y, data.z);
+            if (placedBlocks.has(key) || removedBlocks.has(key)) continue;
             const m = new THREE.Mesh(boxGeo, getMaterials(data.type));
             m.userData.blockType = data.type;
             m.position.set(data.x, data.y, data.z);
-            addBlockMesh(m);
-            chunkBlocks.push(m);
+            if (addBlockMesh(m)) chunkBlocks.push(m);
+        }
+        const [cx, cz] = key.split(',').map(Number);
+        for (const [positionKey, blockType] of placedBlocks) {
+            const [x, y, z] = positionKey.split(',').map(Number);
+            if (Math.floor(x / CHUNK_SIZE) !== cx || Math.floor(z / CHUNK_SIZE) !== cz) continue;
+            const m = new THREE.Mesh(boxGeo, getMaterials(blockType));
+            m.userData.blockType = blockType;
+            m.userData.playerPlaced = true;
+            m.position.set(x, y, z);
+            if (addBlockMesh(m)) chunkBlocks.push(m);
         }
         loadedChunks.set(key, chunkBlocks);
     }
@@ -1582,8 +1608,13 @@ window.addEventListener('mousedown', (e) => {
             renderQuickCraft();
             const placePos = pos.add(intersect.face.normal);
             b.position.copy(placePos);
-            removedBlocks.delete(`${placePos.x},${placePos.y},${placePos.z}`);
-            addBlockMesh(b);
+            const key = posKey(Math.round(placePos.x), Math.round(placePos.y), Math.round(placePos.z));
+            b.userData.playerPlaced = true;
+            if (addBlockMesh(b)) {
+                placedBlocks.set(key, selectedSlot.itemId);
+                removedBlocks.delete(key);
+                markSaveDirty();
+            }
         }
     }
 });
@@ -1659,9 +1690,14 @@ scene.add(ambientLight);
 const sun = new THREE.DirectionalLight(0xffffff, 0.6);
 sun.position.set(10, 20, 10);
 scene.add(sun);
-camera.position.set(0, 30, 0);
+const initialPlayerPosition = loadedSave?.player.position ?? { x: 0, y: 30, z: 0 };
+camera.position.set(initialPlayerPosition.x, initialPlayerPosition.y, initialPlayerPosition.z);
 
-const playerAnchor = new THREE.Vector3(0, 30, 0);
+const playerAnchor = new THREE.Vector3(
+    initialPlayerPosition.x,
+    initialPlayerPosition.y - 1.8,
+    initialPlayerPosition.z
+);
 const thirdPersonDistance = 4.2;
 const thirdPersonFrontDistance = 3.2;
 const playerFacingDir = new THREE.Vector3(0, 0, 1);
