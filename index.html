@@ -108,6 +108,14 @@
         </div>
     </div>
 
-    <script type="module" src="game.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.136.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.136.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module" src="game.js?v=playable-start"></script>
 </body>
 </html>
