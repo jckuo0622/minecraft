@@ -1,5 +1,5 @@
-import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
-import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/PointerLockControls.js';
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { getMaterials, getPixelCanvas, blockIconColors, getItemIconCanvas } from './textures.js';
 import { getGroundAt, checkWall, checkCapsuleWall } from './physics.js';
 import { BlockItem, Inventory, CraftingRecipe, CraftingManager } from './inventory.js';
@@ -805,6 +805,22 @@ function setGameMode(mode) {
     peacefulModeButton.setAttribute('aria-pressed', String(peaceful));
     survivalModeButton.classList.toggle('selected', !peaceful);
     survivalModeButton.setAttribute('aria-pressed', String(!peaceful));
+    if (peaceful) clearZombies();
+}
+
+function clearZombies() {
+    for (const zombie of zombies) scene.remove(zombie);
+    zombies.length = 0;
+    zombieSpawnTimer = 0;
+}
+
+function setGameMode(mode) {
+    gameMode = mode === 'peaceful' ? 'peaceful' : 'survival';
+    const peaceful = gameMode === 'peaceful';
+    peacefulModeButton?.classList.toggle('selected', peaceful);
+    peacefulModeButton?.setAttribute('aria-pressed', String(peaceful));
+    survivalModeButton?.classList.toggle('selected', !peaceful);
+    survivalModeButton?.setAttribute('aria-pressed', String(!peaceful));
     if (peaceful) clearZombies();
 }
 
